@@ -110,6 +110,12 @@ export class HelicopterPlayer {
         this.flightStarted = false;
     }
 
+    setVisibility(visible) {
+        if (this.group) {
+            this.group.visible = visible;
+        }
+    }
+
     resetFlight() {
         this.hasCrashed = false;
         this.flightStarted = false;

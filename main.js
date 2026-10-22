@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { setupScene } from './sceneSetup.js';
 import { OceanWater } from './ocean.js';
+import { MainBase } from './mainbase.js';
 import { HelicopterPlayer } from './player.js';
 import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
@@ -8,27 +9,12 @@ import { setupSettings } from './settings.js';
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
 const ocean = new OceanWater(scene, sunLight);
+const mainBase = new MainBase(scene, camera, renderer);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
-
-const textureLoader = new THREE.TextureLoader();
-const baseTexture = textureLoader.load('mainbase.png', (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.minFilter = THREE.LinearFilter;
-});
-const baseMaterial = new THREE.MeshStandardMaterial({
-    map: baseTexture,
-    transparent: true,
-    alphaTest: 0.5,
-    roughness: 0.4
-});
-const baseGeometry = new THREE.PlaneGeometry(24, 24);
-const baseMesh = new THREE.Mesh(baseGeometry, baseMaterial);
-baseMesh.position.set(0, 5, 0);
-scene.add(baseMesh);
 
 const player = new HelicopterPlayer(scene);
 
-setupSettings(dayNightCycle);
+setupSettings(dayNightCycle, player);
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -68,7 +54,6 @@ function animate() {
     const delta = clock.getDelta();
 
     const nightFactor = dayNightCycle.update(delta);
-    baseMaterial.color.setRGB(1 - nightFactor * 0.4, 1 - nightFactor * 0.4, 1 - nightFactor * 0.3);
 
     player.update(delta);
 
@@ -79,7 +64,8 @@ function animate() {
     camera.position.z = playerPos.z + 50;
     camera.lookAt(playerPos.x, 0, playerPos.z);
 
-    baseMesh.quaternion.copy(camera.quaternion);
+    mainBase.update(nightFactor, camera.quaternion);
+    
     player.mesh.quaternion.copy(camera.quaternion);
 
     renderer.render(scene, camera);
