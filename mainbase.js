@@ -27,6 +27,65 @@ export class MainBase {
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
         this.group.add(this.mesh);
 
+        // --- Exact Configured Foam Settings (Flat on XZ plane with correct rotation, offsets, and height) ---
+        this.foamParams = {
+            radius: 7.5,
+            offsetX: -0.6,
+            offsetZ: -1.0,
+            posY: -2.9,
+            rotX: -45.0,
+            rotY: 0.0,
+            rotZ: 0.0,
+            speed: 0.2
+        };
+
+        this.particlesCount = 2400;
+        this.foamGeometry = new THREE.BufferGeometry();
+        this.foamPositions = new Float32Array(this.particlesCount * 3);
+        this.foamAngles = new Float32Array(this.particlesCount);
+        this.foamOffsets = new Float32Array(this.particlesCount);
+
+        for (let i = 0; i < this.particlesCount; i++) {
+            this.foamPositions[i * 3] = 0;
+            this.foamPositions[i * 3 + 1] = 0;
+            this.foamPositions[i * 3 + 2] = 0;
+            this.foamAngles[i] = (i / this.particlesCount) * Math.PI * 2;
+            this.foamOffsets[i] = Math.random() * Math.PI * 2;
+        }
+
+        this.foamGeometry.setAttribute('position', new THREE.BufferAttribute(this.foamPositions, 3));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+        gradient.addColorStop(0.4, 'rgba(240, 248, 255, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 64, 64);
+
+        const foamTexture = new THREE.CanvasTexture(canvas);
+
+        this.foamMaterial = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: 10.0,
+            map: foamTexture,
+            transparent: true,
+            blending: THREE.NormalBlending,
+            depthWrite: false,
+            opacity: 0.7
+        });
+
+        this.foamParticleSystem = new THREE.Points(this.foamGeometry, this.foamMaterial);
+        this.foamParticleSystem.frustumCulled = false;
+        this.foamParticleSystem.position.set(this.foamParams.offsetX, this.foamParams.posY, this.foamParams.offsetZ);
+        this.foamParticleSystem.rotation.x = THREE.MathUtils.degToRad(this.foamParams.rotX);
+        this.foamParticleSystem.rotation.y = THREE.MathUtils.degToRad(this.foamParams.rotY);
+        this.foamParticleSystem.rotation.z = THREE.MathUtils.degToRad(this.foamParams.rotZ);
+        this.group.add(this.foamParticleSystem);
+
         // --- Final Saved Light Layout Configurations ---
         this.lightConfigs = {
             green: [
@@ -53,9 +112,6 @@ export class MainBase {
         this.buildLightGroup('green', 0x00ff66);
         this.buildLightGroup('red', 0xff0033);
         this.buildLightGroup('white', 0xffffff);
-
-        this.editorActive = false;
-        this.initEditorUI();
     }
 
     buildLightGroup(category, colorHex) {
@@ -75,104 +131,40 @@ export class MainBase {
         });
     }
 
-    initEditorUI() {
-        const uiContainer = document.createElement('div');
-        uiContainer.id = 'light-editor-ui';
-        uiContainer.style.cssText = `
-            position: fixed;
-            top: 80px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.92);
-            border: 2px solid #4a90e2;
-            padding: 15px;
-            border-radius: 8px;
-            color: #ffffff;
-            font-family: monospace;
-            font-size: 12px;
-            z-index: 10000;
-            display: none;
-            flex-direction: column;
-            gap: 12px;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.9);
-            width: 320px;
-        `;
-
-        let htmlContent = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <strong style="color:#4a90e2; font-size:14px;">LIGHT CONTROLS (Press P)</strong>
-            </div>
-            <span style="font-size:11px; color:#aaa;">Type exact X, Y, or Scale values to position lights perfectly on the base.</span>
-        `;
-
-        ['green', 'red', 'white'].forEach(cat => {
-            htmlContent += `<div style="border-top:1px solid #333; padding-top:8px;"><b style="color:${cat === 'green' ? '#00ff66' : cat === 'red' ? '#ff3333' : '#fff'};">${cat.toUpperCase()} LIGHTS</b>`;
-            this.lightConfigs[cat].forEach((cfg, idx) => {
-                htmlContent += `
-                    <div style="display:flex; gap:5px; margin-top:5px; align-items:center; font-size:11px;">
-                        <span>#${idx}</span>
-                        <span>X:</span><input type="number" step="0.1" value="${cfg.x}" data-cat="${cat}" data-idx="${idx}" data-prop="x" style="width:50px; background:#222; color:#fff; border:1px solid #555; padding:2px;">
-                        <span>Y:</span><input type="number" step="0.1" value="${cfg.y}" data-cat="${cat}" data-idx="${idx}" data-prop="y" style="width:50px; background:#222; color:#fff; border:1px solid #555; padding:2px;">
-                        <span>Sz:</span><input type="number" step="0.01" value="${cfg.scale}" data-cat="${cat}" data-idx="${idx}" data-prop="scale" style="width:45px; background:#222; color:#fff; border:1px solid #555; padding:2px;">
-                    </div>
-                `;
-            });
-            htmlContent += `</div>`;
-        });
-
-        htmlContent += `<button id="print-coords-btn" style="background:#2b6cb0; color:#fff; border:none; padding:8px; border-radius:4px; cursor:pointer; font-weight:bold; margin-top:5px;">Print Coords to Console</button>`;
-
-        uiContainer.innerHTML = htmlContent;
-        document.body.appendChild(uiContainer);
-        this.uiContainer = uiContainer;
-
-        uiContainer.addEventListener('input', (e) => {
-            const input = e.target;
-            if (input.tagName === 'INPUT') {
-                const cat = input.dataset.cat;
-                const idx = parseInt(input.dataset.idx);
-                const prop = input.dataset.prop;
-                const val = parseFloat(input.value) || 0;
-
-                this.lightConfigs[cat][idx][prop] = val;
-                this.refreshLightTransforms();
-            }
-        });
-
-        document.getElementById('print-coords-btn').onclick = () => {
-            console.log("=== FINAL LIGHT CONFIGURATIONS ===");
-            console.log(JSON.stringify(this.lightConfigs, null, 2));
-            alert("Coordinates printed to browser console (Press F12 to view)!");
-        };
-
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'KeyP' && !e.repeat) {
-                this.editorActive = !this.editorActive;
-                uiContainer.style.display = this.editorActive ? 'flex' : 'none';
-                console.log(this.editorActive ? "Light Editor ENABLED" : "Light Editor DISABLED");
-            }
-        });
-    }
-
-    refreshLightTransforms() {
-        this.allLights.forEach(item => {
-            const cfg = this.lightConfigs[item.category][item.index];
-            item.marker.position.set(cfg.x, cfg.y, 0.2);
-            item.marker.scale.set(cfg.scale, cfg.scale, cfg.scale);
-            item.pointLight.position.set(cfg.x, cfg.y, 0.2);
-        });
-    }
-
     update(nightFactor, cameraQuaternion) {
         this.material.color.setRGB(1 - nightFactor * 0.4, 1 - nightFactor * 0.4, 1 - nightFactor * 0.3);
 
-        const intensityMultiplier = this.editorActive ? 2.5 : nightFactor * 3.0;
+        if (this.foamMaterial) {
+            this.foamMaterial.opacity = nightFactor > 0.5 ? 0.25 : 0.7;
+        }
+
+        const elapsedTime = Date.now() * 0.001;
+
+        for (let i = 0; i < this.particlesCount; i++) {
+            const idx = i * 3;
+            const angle = this.foamAngles[i];
+            const phase = this.foamOffsets[i];
+
+            const surge = Math.sin(elapsedTime * this.foamParams.speed + phase) * 0.8;
+            const currentRadius = this.foamParams.radius + surge;
+
+            const x = Math.cos(angle) * currentRadius;
+            const y = Math.sin(angle) * currentRadius;
+            const z = Math.sin(elapsedTime * 3.0 + i) * 0.08;
+
+            this.foamPositions[idx] = x;
+            this.foamPositions[idx + 1] = y;
+            this.foamPositions[idx + 2] = z;
+        }
+
+        this.foamGeometry.attributes.position.needsUpdate = true;
+
+        const intensityMultiplier = nightFactor * 3.0;
         this.allLights.forEach(item => {
             item.pointLight.intensity = intensityMultiplier;
         });
 
-        if (cameraQuaternion && !this.editorActive) {
+        if (cameraQuaternion) {
             this.group.quaternion.copy(cameraQuaternion);
         }
     }
