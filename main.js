@@ -8,6 +8,10 @@ import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
 import { WindFarm } from './windfarm.js';
 import { SearchLightSystem } from './searchlight.js';
+import { NavRadar } from './navRadar.js';
+import { InputManager } from './inputManager.js';
+import { MissionManager } from './missionManager.js';
+import { HudManager } from './hudManager.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
@@ -19,84 +23,14 @@ const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 const player = new HelicopterPlayer(scene);
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
+const navRadar = new NavRadar(scene, player);
+
+// Initialize modular managers (passing windFarm into MissionManager for permanent landmark registration)
+const missionManager = new MissionManager(scene, navRadar, windFarm);
+const hudManager = new HudManager();
 
 setupSettings(dayNightCycle, player);
-
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-
-// Raycast intersection plane at ground/sea level (y = 0)
-const planeIntersectTarget = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-
-let isMouseDown = false;
-
-window.addEventListener('pointerdown', (e) => {
-    if (e.button === 0) {
-        isMouseDown = true;
-        updateMouseCoords(e);
-        updateTarget();
-    }
-});
-
-window.addEventListener('pointermove', (e) => {
-    updateMouseCoords(e);
-    if (isMouseDown) {
-        updateTarget();
-    }
-});
-
-window.addEventListener('pointerup', (e) => {
-    if (e.button === 0) {
-        isMouseDown = false;
-    }
-});
-
-function updateMouseCoords(e) {
-    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-}
-
-function updateTarget() {
-    raycaster.setFromCamera(mouse, camera);
-    const targetPoint = new THREE.Vector3();
-    raycaster.ray.intersectPlane(planeIntersectTarget, targetPoint);
-
-    if (targetPoint) {
-        targetPoint.y = 32;
-        player.setTarget(targetPoint);
-    }
-}
-
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyG') {
-        player.toggleGear();
-    }
-    if (e.code === 'KeyE') {
-        player.handleEngineKey();
-    }
-    if (e.code === 'KeyL') {
-        raycaster.setFromCamera(mouse, camera);
-        const mouseWorldPos = new THREE.Vector3();
-        raycaster.ray.intersectPlane(planeIntersectTarget, mouseWorldPos);
-        searchLightSystem.cycleState(mouseWorldPos);
-    }
-    if (e.code === 'Digit1') {
-        helicopterSystems.setTool('WATER');
-    }
-    if (e.code === 'Digit2') {
-        helicopterSystems.setTool('WINCH');
-    }
-    if (e.code === 'Space') {
-        if (!e.repeat) {
-            helicopterSystems.toggleActiveTool();
-        }
-    }
-});
-
-window.addEventListener('wheel', (e) => {
-    camera.zoom = Math.max(0.5, Math.min(2.5, camera.zoom - e.deltaY * 0.001));
-    camera.updateProjectionMatrix();
-});
+const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 const clock = new THREE.Clock();
 
@@ -104,21 +38,20 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
 
-    if (isMouseDown) {
-        updateTarget();
+    if (inputManager.isDragging()) {
+        inputManager.updateTarget();
     }
 
     const nightFactor = dayNightCycle.update(delta);
 
     player.update(delta);
     helicopterSystems.update(delta);
+    missionManager.update(delta, player.getPosition());
 
-    // Calculate mouse world position on the water surface for the searchlight
-    raycaster.setFromCamera(mouse, camera);
-    const mouseWorldPos = new THREE.Vector3();
-    raycaster.ray.intersectPlane(planeIntersectTarget, mouseWorldPos);
+    const mouseWorldPos = inputManager.getMouseWorldPosition();
 
     searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+    navRadar.update();
 
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);

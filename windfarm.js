@@ -63,7 +63,7 @@ export class WindFarm {
 
         // Exactly 1 turbine positioned near the base for testing
         this.createTurbine(25, -25);
-        this.setupMissionControls();
+        this.initFaultListener();
     }
 
     loadTransparentTexture(url, callback) {
@@ -314,28 +314,7 @@ export class WindFarm {
         });
     }
 
-    setupMissionControls() {
-        const info = document.createElement('div');
-        info.style.cssText = `
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: #ffffff;
-            font-family: monospace;
-            font-size: 11px;
-            z-index: 100;
-            line-height: 1.4;
-        `;
-        info.innerHTML = `
-            <strong>WTG Mission Testing</strong><br>
-            [ F ]: Toggle Sparks & Smoke Stack (<span id="spark-status" style="color: #ff4444;">NORMAL</span>)
-        `;
-        document.body.appendChild(info);
-
+    initFaultListener() {
         window.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 'f') {
                 for (const turbine of this.turbines) {
