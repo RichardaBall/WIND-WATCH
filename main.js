@@ -7,6 +7,7 @@ import { HelicopterSystems } from './helicopterSystems.js';
 import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
 import { WindFarm } from './windfarm.js';
+import { SearchLightSystem } from './searchlight.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
@@ -16,15 +17,15 @@ const windFarm = new WindFarm(scene, camera);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 
 const player = new HelicopterPlayer(scene);
-
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
+const searchLightSystem = new SearchLightSystem(scene, player.group);
 
 setupSettings(dayNightCycle, player);
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
-// Raycast intersection plane at ground level (y = 0)
+// Raycast intersection plane at ground/sea level (y = 0)
 const planeIntersectTarget = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 let isMouseDown = false;
@@ -38,8 +39,9 @@ window.addEventListener('pointerdown', (e) => {
 });
 
 window.addEventListener('pointermove', (e) => {
+    updateMouseCoords(e);
     if (isMouseDown) {
-        updateMouseCoords(e);
+        updateTarget();
     }
 });
 
@@ -71,6 +73,12 @@ window.addEventListener('keydown', (e) => {
     }
     if (e.code === 'KeyE') {
         player.handleEngineKey();
+    }
+    if (e.code === 'KeyL') {
+        raycaster.setFromCamera(mouse, camera);
+        const mouseWorldPos = new THREE.Vector3();
+        raycaster.ray.intersectPlane(planeIntersectTarget, mouseWorldPos);
+        searchLightSystem.cycleState(mouseWorldPos);
     }
     if (e.code === 'Digit1') {
         helicopterSystems.setTool('WATER');
@@ -105,10 +113,16 @@ function animate() {
     player.update(delta);
     helicopterSystems.update(delta);
 
+    // Calculate mouse world position on the water surface for the searchlight
+    raycaster.setFromCamera(mouse, camera);
+    const mouseWorldPos = new THREE.Vector3();
+    raycaster.ray.intersectPlane(planeIntersectTarget, mouseWorldPos);
+
+    searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);
 
-    // Calculate the midpoint between the helicopter and the sea level (y = 0)
     const waterLevel = 0.0;
     const focusPoint = new THREE.Vector3(
         playerPos.x,
@@ -116,7 +130,6 @@ function animate() {
         playerPos.z
     );
 
-    // Position the camera relative to the focus midpoint with a fixed isometric offset
     const cameraOffset = new THREE.Vector3(50, 50, 50);
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
