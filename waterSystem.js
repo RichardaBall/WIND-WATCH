@@ -64,12 +64,14 @@ export class WaterSystem {
             map: texture,
             transparent: true,
             blending: THREE.NormalBlending,
-            depthWrite: false,
+            depthWrite: false, // Prevent depth sorting issues against other objects
+            depthTest: true,
             opacity: this.params.particleOpacity
         });
 
         this.particleSystem = new THREE.Points(this.particleGeometry, this.particleMaterial);
         this.particleSystem.frustumCulled = false;
+        this.particleSystem.renderOrder = 999; // Ensure water renders on top of scene assets
         this.scene.add(this.particleSystem);
 
         // --- Surface Impact Splash Setup ---
@@ -93,12 +95,14 @@ export class WaterSystem {
             map: texture,
             transparent: true,
             blending: THREE.NormalBlending,
-            depthWrite: false,
+            depthWrite: false, // Prevent depth sorting issues
+            depthTest: true,
             opacity: this.params.splashOpacity
         });
 
         this.splashSystem = new THREE.Points(this.splashGeometry, this.splashMaterial);
         this.splashSystem.frustumCulled = false;
+        this.splashSystem.renderOrder = 999; // Ensure splashes render on top
         this.scene.add(this.splashSystem);
         
         this.spawnIndex = 0;
@@ -132,16 +136,22 @@ export class WaterSystem {
 
     start() {
         if (this.playerRef && this.playerRef.gearDown) {
-            console.log("Cannot spray water while landing gear is down! 🛞");
+            console.log("Cannot spray water while landing gear is down![cite: 7]");
             this.isActive = false;
             return;
         }
         this.isActive = true;
-        console.log("Water Spray: ACTIVE 💦");
+        if (this.playerRef && this.playerRef.audioManager) {
+            this.playerRef.audioManager.startWaterSpray();
+        }
+        console.log("Water Spray: ACTIVE[cite: 7]");
     }
 
     stop() {
         this.isActive = false;
+        if (this.playerRef && this.playerRef.audioManager) {
+            this.playerRef.audioManager.stopWaterSpray();
+        }
         console.log("Water Spray: OFF");
     }
 
@@ -156,6 +166,9 @@ export class WaterSystem {
     update(delta) {
         if (this.isActive && this.playerRef && this.playerRef.gearDown) {
             this.isActive = false;
+            if (this.playerRef.audioManager) {
+                this.playerRef.audioManager.stopWaterSpray();
+            }
             console.log("Water spray cut off: Landing gear deployed!");
         }
 

@@ -57,6 +57,16 @@ export class HelicopterPlayer {
         this.maxRotorSpeed = 90.0;
 
         this.gearDown = true;
+        this.isWinchActive = false;
+
+        // --- Belly Night Searchlight Setup ---
+        this.searchLight = new THREE.SpotLight(0xffffee, 0.0, 120.0, Math.PI / 5, 0.4, 1.5);
+        this.searchLight.position.set(0, -0.5, 0);
+        this.searchLightTarget = new THREE.Object3D();
+        this.searchLightTarget.position.set(0, -15, 10);
+        this.group.add(this.searchLight);
+        this.group.add(this.searchLightTarget);
+        this.searchLight.target = this.searchLightTarget;
 
         // --- Ground Shadow Setup ---
         const shadowCanvas = document.createElement('canvas');
@@ -184,6 +194,7 @@ export class HelicopterPlayer {
         this.flightStarted = false;
         this.engineState = 'OFF';
         this.gearDown = true;
+        this.isWinchActive = false;
         this.currentFrame = 5;
         if (this.gearDownTex && this.material) {
             this.material.map = this.gearDownTex;
@@ -199,6 +210,7 @@ export class HelicopterPlayer {
         this.targetAltitude = 6;
         this.isMoving = false;
         this.rotorSpeed = 0;
+        this.searchLight.intensity = 0;
         this.audioManager.stopAllAudio();
         this.crashHandler.hideRestart();
         if (this.shadowMesh) this.shadowMesh.visible = true;
@@ -210,6 +222,7 @@ export class HelicopterPlayer {
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
         this.isMoving = false;
+        this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
         if (this.dropLine) this.dropLine.visible = false;
         
@@ -220,6 +233,13 @@ export class HelicopterPlayer {
         }
 
         this.crashHandler.deploy(this.group.position);
+    }
+
+    setWinchMode(isWinchActive) {
+        this.isWinchActive = isWinchActive;
+        if (this.engineState === 'RUNNING') {
+            this.targetAltitude = isWinchActive ? 12.0 : 32.0;
+        }
     }
 
     handleEngineKey() {
@@ -239,7 +259,7 @@ export class HelicopterPlayer {
                 if (this.engineState === 'STARTING') {
                     this.engineState = 'RUNNING';
                     this.audioManager.startRotor();
-                    this.targetAltitude = 32; 
+                    this.targetAltitude = this.isWinchActive ? 12.0 : 32.0; 
                 }
             });
         } else if (this.engineState === 'RUNNING') {
@@ -259,7 +279,8 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
-        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - 32) > 1.0) {
+        const activeCruiseHeight = this.isWinchActive ? 12.0 : 32.0;
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - activeCruiseHeight) > 2.0) {
             return;
         }
 
@@ -268,10 +289,10 @@ export class HelicopterPlayer {
         
         const snapThreshold = 8.0;
         if (clickPos2D.distanceTo(padCenter) < snapThreshold) {
-            this.targetPosition.set(0, 32, 0);
+            this.targetPosition.set(0, activeCruiseHeight, 0);
         } else {
             this.targetPosition.copy(newPos);
-            this.targetPosition.y = 32; 
+            this.targetPosition.y = activeCruiseHeight; 
         }
 
         this.isMoving = true;
@@ -300,8 +321,11 @@ export class HelicopterPlayer {
         this.audioManager.playGear();
     }
 
-    update(delta) {
+    update(delta, nightFactor = 0.0) {
         if (this.hasCrashed) return;
+
+        // Dynamically scale searchlight intensity based on night factor
+        this.searchLight.intensity = (this.engineState === 'RUNNING') ? (nightFactor * 65.0) : 0.0;
 
         const padCenter = new THREE.Vector2(0, 0);
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
@@ -372,7 +396,8 @@ export class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        if (this.engineState !== 'RUNNING' || Math.abs(currentPos.y - 32) > 1.0) {
+        const activeCruiseHeight = this.isWinchActive ? 12.0 : 32.0;
+        if (this.engineState !== 'RUNNING' || Math.abs(currentPos.y - activeCruiseHeight) > 2.0) {
             this.targetPosition.x = currentPos.x;
             this.targetPosition.z = currentPos.z;
             this.isMoving = false;

@@ -27,33 +27,38 @@ export class MainBase {
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
         this.group.add(this.mesh);
 
-        // --- Exact Configured Foam Settings (Flat on XZ plane with correct rotation, offsets, and height) ---
+        // --- Hardcoded Square Foam Settings ---
         this.foamParams = {
-            radius: 7.5,
-            offsetX: -0.6,
-            offsetZ: -1.0,
+            width: 13.0,
+            height: 13.0,
+            cornerRadius: 2.0,
+            particlesCount: 300,
+            offsetX: -0.5,
+            offsetZ: -0.5,
             posY: -2.9,
-            rotX: -45.0,
-            rotY: 0.0,
-            rotZ: 0.0,
-            speed: 0.2
+            rotX: -37.0,
+            rotY: -3.0,
+            rotZ: 50.0,
+            waveSpeed: 0.2,
+            waveAmplitude: 0.6,
+            particleSize: 9.0,
+            opacity: 0.5
         };
 
-        this.particlesCount = 2400;
+        this.maxParticles = 8000;
         this.foamGeometry = new THREE.BufferGeometry();
-        this.foamPositions = new Float32Array(this.particlesCount * 3);
-        this.foamAngles = new Float32Array(this.particlesCount);
-        this.foamOffsets = new Float32Array(this.particlesCount);
+        this.foamPositions = new Float32Array(this.maxParticles * 3);
+        this.foamOffsets = new Float32Array(this.maxParticles);
 
-        for (let i = 0; i < this.particlesCount; i++) {
+        for (let i = 0; i < this.maxParticles; i++) {
             this.foamPositions[i * 3] = 0;
             this.foamPositions[i * 3 + 1] = 0;
             this.foamPositions[i * 3 + 2] = 0;
-            this.foamAngles[i] = (i / this.particlesCount) * Math.PI * 2;
             this.foamOffsets[i] = Math.random() * Math.PI * 2;
         }
 
         this.foamGeometry.setAttribute('position', new THREE.BufferAttribute(this.foamPositions, 3));
+        this.foamGeometry.setDrawRange(0, this.foamParams.particlesCount);
 
         const canvas = document.createElement('canvas');
         canvas.width = 64;
@@ -70,12 +75,12 @@ export class MainBase {
 
         this.foamMaterial = new THREE.PointsMaterial({
             color: 0xffffff,
-            size: 10.0,
+            size: this.foamParams.particleSize,
             map: foamTexture,
             transparent: true,
             blending: THREE.NormalBlending,
             depthWrite: false,
-            opacity: 0.7
+            opacity: this.foamParams.opacity
         });
 
         this.foamParticleSystem = new THREE.Points(this.foamGeometry, this.foamMaterial);
@@ -135,21 +140,73 @@ export class MainBase {
         this.material.color.setRGB(1 - nightFactor * 0.4, 1 - nightFactor * 0.4, 1 - nightFactor * 0.3);
 
         if (this.foamMaterial) {
-            this.foamMaterial.opacity = nightFactor > 0.5 ? 0.25 : 0.7;
+            const baseOp = this.foamParams.opacity;
+            this.foamMaterial.opacity = nightFactor > 0.5 ? baseOp * 0.4 : baseOp;
         }
 
         const elapsedTime = Date.now() * 0.001;
+        const count = this.foamParams.particlesCount;
+        const w = Math.max(0.1, this.foamParams.width);
+        const h = Math.max(0.1, this.foamParams.height);
+        const r = Math.min(this.foamParams.cornerRadius, w / 2, h / 2);
 
-        for (let i = 0; i < this.particlesCount; i++) {
+        const getRoundedRectPoint = (t, out = new THREE.Vector2()) => {
+            const hw = w / 2;
+            const hh = h / 2;
+            const sw = w - 2 * r;
+            const sh = h - 2 * r;
+            const cLen = (Math.PI * r) / 2;
+            const totalLen = 2 * sw + 2 * sh + 4 * cLen;
+
+            let d = (t % 1.0) * totalLen;
+            if (d < 0) d += totalLen;
+
+            if (d <= sw) return out.set(-hw + r + d, -hh);
+            d -= sw;
+            if (d <= cLen) {
+                const ang = -Math.PI / 2 + (d / cLen) * (Math.PI / 2);
+                return out.set(hw - r + r * Math.cos(ang), -hh + r + r * Math.sin(ang));
+            }
+            d -= cLen;
+            if (d <= sh) return out.set(hw, -hh + r + d);
+            d -= sh;
+            if (d <= cLen) {
+                const ang = 0 + (d / cLen) * (Math.PI / 2);
+                return out.set(hw - r + r * Math.cos(ang), hh - r + r * Math.sin(ang));
+            }
+            d -= cLen;
+            if (d <= sw) return out.set(hw - r - d, hh);
+            d -= sw;
+            if (d <= cLen) {
+                const ang = Math.PI / 2 + (d / cLen) * (Math.PI / 2);
+                return out.set(-hw + r + r * Math.cos(ang), hh - r + r * Math.sin(ang));
+            }
+            d -= cLen;
+            if (d <= sh) return out.set(-hw, hh - r - d);
+            d -= sh;
+            const ang = Math.PI + (d / cLen) * (Math.PI / 2);
+            return out.set(-hw + r + r * Math.cos(ang), -hh + r + r * Math.sin(ang));
+        };
+
+        const tempVec = new THREE.Vector2();
+
+        for (let i = 0; i < count; i++) {
             const idx = i * 3;
-            const angle = this.foamAngles[i];
             const phase = this.foamOffsets[i];
 
-            const surge = Math.sin(elapsedTime * this.foamParams.speed + phase) * 0.8;
-            const currentRadius = this.foamParams.radius + surge;
+            const baseT = i / count;
+            getRoundedRectPoint(baseT, tempVec);
+            let x = tempVec.x;
+            let y = tempVec.y;
 
-            const x = Math.cos(angle) * currentRadius;
-            const y = Math.sin(angle) * currentRadius;
+            // Pure wave oscillation in and out against the square shore
+            const wave = Math.sin(elapsedTime * this.foamParams.waveSpeed * 3.0 + phase) * this.foamParams.waveAmplitude;
+            const len = Math.sqrt(x * x + y * y);
+            if (len > 0.001) {
+                x += (x / len) * wave;
+                y += (y / len) * wave;
+            }
+
             const z = Math.sin(elapsedTime * 3.0 + i) * 0.08;
 
             this.foamPositions[idx] = x;

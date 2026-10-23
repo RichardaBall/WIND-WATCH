@@ -72,16 +72,16 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyE') {
         player.handleEngineKey();
     }
+    if (e.code === 'Digit1') {
+        helicopterSystems.setTool('WATER');
+    }
+    if (e.code === 'Digit2') {
+        helicopterSystems.setTool('WINCH');
+    }
     if (e.code === 'Space') {
         if (!e.repeat) {
-            helicopterSystems.startActiveTool();
+            helicopterSystems.toggleActiveTool();
         }
-    }
-});
-
-window.addEventListener('keyup', (e) => {
-    if (e.code === 'Space') {
-        helicopterSystems.stopActiveTool();
     }
 });
 
@@ -108,12 +108,18 @@ function animate() {
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);
 
-    camera.position.x = playerPos.x + 50;
-    camera.position.z = playerPos.z + 50;
-    camera.position.y = playerPos.y + 50;
-    
-    // Offset the lookAt target to shift the helicopter higher up on the screen
-    camera.lookAt(playerPos.x + 15, playerPos.y, playerPos.z + 15);
+    // Calculate the midpoint between the helicopter and the sea level (y = 0)
+    const waterLevel = 0.0;
+    const focusPoint = new THREE.Vector3(
+        playerPos.x,
+        (playerPos.y + waterLevel) * 0.5,
+        playerPos.z
+    );
+
+    // Position the camera relative to the focus midpoint with a fixed isometric offset
+    const cameraOffset = new THREE.Vector3(50, 50, 50);
+    camera.position.copy(focusPoint).add(cameraOffset);
+    camera.lookAt(focusPoint);
 
     mainBase.update(nightFactor, camera.quaternion);
     windFarm.update(delta, camera.quaternion);
