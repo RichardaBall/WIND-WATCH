@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export function setupSettings(dayNightCycle, player) {
     const container = document.createElement('div');
     container.style.position = 'absolute';
@@ -11,6 +13,7 @@ export function setupSettings(dayNightCycle, player) {
     container.style.fontFamily = 'monospace';
     container.style.fontSize = '12px';
     container.style.zIndex = '100';
+    container.style.display = 'none'; // Hidden by default
 
     const title = document.createElement('div');
     title.innerHTML = '<strong>Dev Settings</strong> (Press <strong>T</strong> to toggle)';
@@ -68,7 +71,6 @@ export function setupSettings(dayNightCycle, player) {
         if (typeof dayNightCycle.toggleTimelapse === 'function') {
             isActive = dayNightCycle.toggleTimelapse();
         } else if (typeof dayNightCycle.setTimelapse === 'function') {
-            // If it accepts a boolean toggle
             isActive = timelapseBtn.innerText.includes('OFF');
             dayNightCycle.setTimelapse(isActive);
         }
@@ -88,7 +90,7 @@ export function setupSettings(dayNightCycle, player) {
 
     document.body.appendChild(container);
 
-    let isVisible = true;
+    let isVisible = false; // Initial state matches hidden display
     window.addEventListener('keydown', (e) => {
         if (e.code === 'KeyT' && !e.repeat) {
             isVisible = !isVisible;

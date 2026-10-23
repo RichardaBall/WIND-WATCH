@@ -48,7 +48,7 @@ function animate() {
     player.update(delta);
     helicopterSystems.update(delta);
     missionManager.update(delta, player.getPosition());
-    hudManager.update(helicopterSystems);
+    hudManager.update(helicopterSystems, searchLightSystem);
 
     const mouseWorldPos = inputManager.getMouseWorldPosition();
 

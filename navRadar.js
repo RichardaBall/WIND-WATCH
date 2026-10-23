@@ -9,7 +9,7 @@ export class NavRadar {
         // Track the last sweep intersection angle for each marker to handle fading
         this.blipIntensities = new Map();
 
-        // Create UI container for the nose radar at bottom-center screen with CRT styling
+        // Create UI container for the nose radar at bottom-center screen with semi-transparent CRT styling
         this.container = document.createElement('div');
         this.container.id = 'nav-radar-hud';
         this.container.style.position = 'absolute';
@@ -18,14 +18,14 @@ export class NavRadar {
         this.container.style.transform = 'translateX(-50%)';
         this.container.style.width = '280px';
         this.container.style.height = '150px';
-        this.container.style.background = 'radial-gradient(circle at center, rgba(5, 30, 15, 0.95) 0%, rgba(2, 10, 5, 0.98) 100%)';
+        this.container.style.background = 'radial-gradient(circle at center, rgba(5, 30, 15, 0.45) 0%, rgba(2, 10, 5, 0.65) 100%)';
         this.container.style.border = '2px solid rgba(46, 204, 113, 0.6)';
         this.container.style.borderTopLeftRadius = '140px';
         this.container.style.borderTopRightRadius = '140px';
         this.container.style.borderBottom = 'none';
         this.container.style.overflow = 'hidden';
         this.container.style.pointerEvents = 'none';
-        this.container.style.boxShadow = '0 0 20px rgba(46, 204, 113, 0.25), inset 0 0 25px rgba(46, 204, 113, 0.4)';
+        this.container.style.boxShadow = '0 0 20px rgba(46, 204, 113, 0.25), inset 0 0 25px rgba(46, 204, 113, 0.3)';
 
         // Canvas for drawing radar sweep, range rings, and target blips
         this.canvas = document.createElement('canvas');
@@ -76,12 +76,12 @@ export class NavRadar {
         const centerY = height; // Bottom center origin
         const radius = 130;
 
-        // Clear canvas with subtle trailing effect
-        ctx.fillStyle = 'rgba(2, 12, 6, 0.35)';
+        // Clear canvas with lighter trailing effect for semi-transparency
+        ctx.fillStyle = 'rgba(2, 12, 6, 0.25)';
         ctx.fillRect(0, 0, width, height);
 
         // Draw scanlines for retro CRT aesthetic
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
         for (let y = 0; y < height; y += 3) {
             ctx.fillRect(0, y, width, 1);
         }
@@ -103,14 +103,6 @@ export class NavRadar {
         ctx.moveTo(centerX - radius, centerY);
         ctx.lineTo(centerX + radius, centerY);
         ctx.stroke();
-
-        // Draw heading ticks and labels
-        ctx.fillStyle = '#2ecc71';
-        ctx.font = '9px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('0° (NOSE)', centerX, 18);
-        ctx.fillText('-90°', 30, height - 8);
-        ctx.fillText('+90°', width - 30, height - 8);
 
         if (!this.player) return;
 
@@ -148,39 +140,45 @@ export class NavRadar {
             while (relativeAngle > Math.PI) relativeAngle -= Math.PI * 2;
             while (relativeAngle < -Math.PI) relativeAngle += Math.PI * 2;
 
-            // Forward 180-degree check (-90° to +90° relative to nose)
-            if (relativeAngle >= -Math.PI / 2 && relativeAngle <= Math.PI / 2) {
+            let blipX, blipY;
+            const isBehind = relativeAngle < -Math.PI / 2 || relativeAngle > Math.PI / 2;
+
+            if (!isBehind) {
+                // Front 180-degree view (normal radar projection)
                 const radarDist = (distance / this.maxRange) * radius;
-                const blipX = centerX - radarDist * Math.sin(relativeAngle);
-                const blipY = centerY - radarDist * Math.cos(relativeAngle);
+                blipX = centerX - radarDist * Math.sin(relativeAngle);
+                blipY = centerY - radarDist * Math.cos(relativeAngle);
+            } else {
+                // Clamped to the bottom baseline for objects behind the player
+                // Left bottom edge if on the left, right bottom edge if on the right
+                const sideOffset = relativeAngle > 0 ? -radius : radius;
+                blipX = centerX + sideOffset;
+                blipY = centerY;
+            }
 
-                // Calculate angle of this blip relative to bottom center origin (-PI/2 to PI/2 range on canvas)
-                const blipAngle = Math.atan2(blipX - centerX, centerY - blipY) - Math.PI / 2;
+            // Check if the sweeping beam is currently passing over this relative angle
+            let intensity = this.blipIntensities.get(id) || 0;
+            const angleDiff = Math.abs(sweepRad - relativeAngle);
+            
+            if (angleDiff < 0.15) {
+                intensity = 1.0; // Fully lit when sweep passes over
+            } else {
+                intensity = Math.max(0, intensity - 0.015); // Fade out gradually
+            }
+            this.blipIntensities.set(id, intensity);
 
-                // Check if the sweeping beam is currently passing over this blip
-                let intensity = this.blipIntensities.get(id) || 0;
-                const angleDiff = Math.abs(sweepRad - relativeAngle);
-                
-                if (angleDiff < 0.12) {
-                    intensity = 1.0; // Fully lit when sweep passes over
-                } else {
-                    intensity = Math.max(0, intensity - 0.015); // Fade out gradually
-                }
-                this.blipIntensities.set(id, intensity);
+            // Only render if visible (intensity > 0.05)
+            if (intensity > 0.05) {
+                ctx.save();
+                ctx.globalAlpha = intensity;
+                ctx.shadowColor = marker.color;
+                ctx.shadowBlur = 12 * intensity;
 
-                // Only render if visible (intensity > 0)
-                if (intensity > 0.05) {
-                    ctx.save();
-                    ctx.globalAlpha = intensity;
-                    ctx.shadowColor = marker.color;
-                    ctx.shadowBlur = 12 * intensity;
-
-                    ctx.fillStyle = marker.color;
-                    ctx.beginPath();
-                    ctx.arc(blipX, blipY, 4.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
-                }
+                ctx.fillStyle = marker.color;
+                ctx.beginPath();
+                ctx.arc(blipX, blipY, isBehind ? 3.5 : 4.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
             }
         }
 
