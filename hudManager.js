@@ -1,7 +1,7 @@
 export class HudManager {
     constructor() {
         this.createInstructionsOverlay();
-        this.createMissionStatusOverlay();
+        this.createResourceHud();
     }
 
     createInstructionsOverlay() {
@@ -20,7 +20,7 @@ export class HudManager {
             font-size: 13px;
             line-height: 1.5;
             font-family: monospace;
-            z-index: 100;
+            z-index: 999;
         `;
         instructions.innerHTML = `
             <strong>CONTROLS:</strong><br>
@@ -36,35 +36,67 @@ export class HudManager {
         document.body.appendChild(instructions);
     }
 
-    createMissionStatusOverlay() {
-        const info = document.createElement('div');
-        info.id = 'mission-hud-overlay';
-        info.style.cssText = `
+    createResourceHud() {
+        const hud = document.createElement('div');
+        hud.id = 'resource-hud';
+        hud.style.cssText = `
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            top: 20px;
+            right: 20px;
             color: #ffffff;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            pointer-events: none;
+            font-size: 13px;
             font-family: monospace;
-            font-size: 11px;
-            z-index: 100;
-            line-height: 1.4;
+            z-index: 999;
+            width: 180px;
+            display: block;
         `;
-        info.innerHTML = `
-            <strong>WTG Mission Testing</strong><br>
-            [ F ]: Toggle Sparks & Smoke Stack (<span id="spark-status" style="color: #ff4444;">NORMAL</span>)
+        hud.innerHTML = `
+            <div style="margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>FUEL:</span>
+                    <span id="fuel-text">100%</span>
+                </div>
+                <div style="background: #444; height: 10px; border-radius: 3px; overflow: hidden;">
+                    <div id="fuel-bar" style="background: #e67e22; width: 100%; height: 100%;"></div>
+                </div>
+            </div>
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span>WATER:</span>
+                    <span id="water-text">100%</span>
+                </div>
+                <div style="background: #444; height: 10px; border-radius: 3px; overflow: hidden;">
+                    <div id="water-bar" style="background: #3498db; width: 100%; height: 100%;"></div>
+                </div>
+            </div>
         `;
-        document.body.appendChild(info);
+        document.body.appendChild(hud);
     }
 
-    updateSparkStatus(isSparking) {
-        const statusEl = document.getElementById('spark-status');
-        if (statusEl) {
-            statusEl.innerText = isSparking ? 'FAULT SPARKING ⚡' : 'NORMAL';
-            statusEl.style.color = isSparking ? '#00ccff' : '#ff4444';
+    update(helicopterSystems) {
+        if (!helicopterSystems) return;
+
+        const fuelPercent = Math.max(0, Math.min(100, Math.round(helicopterSystems.fuel)));
+        const waterPercent = Math.max(0, Math.min(100, Math.round(helicopterSystems.water)));
+
+        const fuelBar = document.getElementById('fuel-bar');
+        const fuelText = document.getElementById('fuel-text');
+        const waterBar = document.getElementById('water-bar');
+        const waterText = document.getElementById('water-text');
+
+        if (fuelBar && fuelText) {
+            fuelBar.style.width = `${fuelPercent}%`;
+            fuelText.innerText = `${fuelPercent}%`;
+        }
+
+        if (waterBar && waterText) {
+            waterBar.style.width = `${waterPercent}%`;
+            waterText.innerText = `${waterPercent}%`;
         }
     }
 }

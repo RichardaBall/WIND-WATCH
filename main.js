@@ -25,8 +25,8 @@ const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player);
 
-// Initialize modular managers (passing windFarm into MissionManager for permanent landmark registration)
-const missionManager = new MissionManager(scene, navRadar, windFarm);
+// Initialize modular managers
+const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
 const hudManager = new HudManager();
 
 setupSettings(dayNightCycle, player);
@@ -36,7 +36,8 @@ const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
-    const delta = clock.getDelta();
+    // Cap delta to prevent physics/particle explosions when switching browser tabs
+    const delta = Math.min(clock.getDelta(), 0.1);
 
     if (inputManager.isDragging()) {
         inputManager.updateTarget();
@@ -47,6 +48,7 @@ function animate() {
     player.update(delta);
     helicopterSystems.update(delta);
     missionManager.update(delta, player.getPosition());
+    hudManager.update(helicopterSystems);
 
     const mouseWorldPos = inputManager.getMouseWorldPosition();
 

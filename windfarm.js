@@ -63,7 +63,6 @@ export class WindFarm {
 
         // Exactly 1 turbine positioned near the base for testing
         this.createTurbine(25, -25);
-        this.initFaultListener();
     }
 
     loadTransparentTexture(url, callback) {
@@ -314,23 +313,28 @@ export class WindFarm {
         });
     }
 
-    initFaultListener() {
-        window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'f') {
-                for (const turbine of this.turbines) {
-                    turbine.isSparking = !turbine.isSparking;
-                    turbine.sparkMaterial.opacity = turbine.isSparking ? 0.9 : 0.0;
-                    turbine.stackMaterial.opacity = turbine.isSparking ? 0.6 : 0.0;
-                    turbine.sparkLight.intensity = turbine.isSparking ? 5.0 : 0.0;
-                    
-                    const statusEl = document.getElementById('spark-status');
-                    if (statusEl) {
-                        statusEl.innerText = turbine.isSparking ? 'FAULT SPARKING ⚡' : 'NORMAL';
-                        statusEl.style.color = turbine.isSparking ? '#00ccff' : '#ff4444';
-                    }
-                }
-            }
-        });
+    setTurbineFire(index, sparking) {
+        if (this.turbines[index]) {
+            const turbine = this.turbines[index];
+            turbine.isSparking = sparking;
+            turbine.sparkMaterial.opacity = sparking ? 0.9 : 0.0;
+            turbine.stackMaterial.opacity = sparking ? 0.6 : 0.0;
+            turbine.sparkLight.intensity = sparking ? 5.0 : 0.0;
+        }
+    }
+
+    getTurbineWorldPosition(index = 0) {
+        if (this.turbines[index]) {
+            const pos = new THREE.Vector3();
+            this.turbines[index].group.getWorldPosition(pos);
+            pos.y += 20; // Target the nacelle/fire area
+            return pos;
+        }
+        return new THREE.Vector3(25, 20, -25);
+    }
+
+    isTurbineOnFire(index = 0) {
+        return this.turbines[index] ? this.turbines[index].isSparking : false;
     }
 
     update(delta, cameraQuaternion) {
