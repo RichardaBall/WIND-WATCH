@@ -5,11 +5,13 @@ import { MainBase } from './mainbase.js';
 import { HelicopterPlayer } from './player.js';
 import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
+import { WindFarm } from './windfarm.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
 const ocean = new OceanWater(scene, sunLight);
 const mainBase = new MainBase(scene, camera, renderer);
+const windFarm = new WindFarm(scene, camera);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 
 const player = new HelicopterPlayer(scene);
@@ -65,6 +67,7 @@ function animate() {
     camera.lookAt(playerPos.x, 0, playerPos.z);
 
     mainBase.update(nightFactor, camera.quaternion);
+    windFarm.update(delta, camera.quaternion);
     
     player.mesh.quaternion.copy(camera.quaternion);
 
