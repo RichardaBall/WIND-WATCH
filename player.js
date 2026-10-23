@@ -13,12 +13,15 @@ export class HelicopterPlayer {
 
         const geometry = new THREE.PlaneGeometry(24, 24);
         
+        // Single material handling base shading and emissive map for both nav lights and cockpit glow
         this.material = new THREE.MeshStandardMaterial({
             color: 0xffffff,
+            roughness: 0.4,
             transparent: true,
             alphaTest: 0.5,
-            roughness: 0.4,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            emissive: 0xffffff,
+            emissiveIntensity: 2.0
         });
 
         this.mesh = new THREE.Mesh(geometry, this.material);
@@ -55,6 +58,50 @@ export class HelicopterPlayer {
 
         this.gearDown = true;
 
+        // --- Ground Shadow Setup ---
+        const shadowCanvas = document.createElement('canvas');
+        shadowCanvas.width = 64;
+        shadowCanvas.height = 64;
+        const sCtx = shadowCanvas.getContext('2d');
+        const sGrad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.35)');
+        sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.15)');
+        sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        sCtx.fillStyle = sGrad;
+        sCtx.fillRect(0, 0, 64, 64);
+
+        const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+        const shadowGeo = new THREE.PlaneGeometry(10, 10);
+        const shadowMat = new THREE.MeshBasicMaterial({
+            map: shadowTexture,
+            transparent: true,
+            depthWrite: false,
+            depthTest: false
+        });
+        this.shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+        this.shadowMesh.rotation.x = -Math.PI / 2; 
+        this.shadowMesh.position.set(0, 0.2, 0);   
+        this.scene.add(this.shadowMesh);
+
+        // --- Vertical Tracking Line Setup ---
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 0)
+        ]);
+        const lineMat = new THREE.LineDashedMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.25,
+            dashSize: 0.2,
+            gapSize: 0.6
+        });
+        this.dropLine = new THREE.Line(lineGeo, lineMat);
+        this.dropLine.frustumCulled = false;
+        this.scene.add(this.dropLine);
+
+        // Start facing down using frame index 5
+        this.currentFrame = 5;
+
         textureLoader.load('helicopter_gear.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
@@ -62,7 +109,7 @@ export class HelicopterPlayer {
             tex.wrapS = THREE.RepeatWrapping;
             tex.wrapT = THREE.RepeatWrapping;
             tex.repeat.set(1 / this.totalFrames, 1);
-            tex.offset.x = 0;
+            tex.offset.x = this.currentFrame * (1 / this.totalFrames);
 
             this.gearDownTex = tex; 
             if (this.gearDown) {
@@ -80,25 +127,39 @@ export class HelicopterPlayer {
             tex.wrapS = THREE.RepeatWrapping;
             tex.wrapT = THREE.RepeatWrapping;
             tex.repeat.set(1 / this.totalFrames, 1);
-            tex.offset.x = 0;
+            tex.offset.x = this.currentFrame * (1 / this.totalFrames);
 
             this.gearUpTex = tex; 
         }, undefined, (err) => {
             console.error('Error loading helicopter.png:', err);
         });
 
+        textureLoader.load('helicopter_emissive.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1 / this.totalFrames, 1);
+            tex.offset.x = this.currentFrame * (1 / this.totalFrames);
+
+            this.emissiveTex = tex;
+            this.material.emissiveMap = tex;
+            this.material.needsUpdate = true;
+        }, undefined, (err) => {
+            console.warn('helicopter_emissive.png not found.');
+        });
+
         this.group.position.set(0, 6, 0);
         this.targetPosition = new THREE.Vector3(0, 6, 0);
         this.speed = 25.0;
         this.isMoving = false;
-        this.currentFrame = 3;
 
         this.engineState = 'OFF'; 
         this.targetAltitude = 6;  
 
         this.audioManager = new AudioManager();
         
-        // Initialize Crash Handler
         this.crashHandler = new crash(scene);
         this.crashHandler.hideRestart();
         this.crashHandler.showRestart(() => {
@@ -113,6 +174,8 @@ export class HelicopterPlayer {
     setVisibility(visible) {
         if (this.group) {
             this.group.visible = visible;
+            if (this.shadowMesh) this.shadowMesh.visible = visible;
+            if (this.dropLine) this.dropLine.visible = visible;
         }
     }
 
@@ -121,8 +184,16 @@ export class HelicopterPlayer {
         this.flightStarted = false;
         this.engineState = 'OFF';
         this.gearDown = true;
-        this.material.map = this.gearDownTex;
-        this.material.needsUpdate = true;
+        this.currentFrame = 5;
+        if (this.gearDownTex && this.material) {
+            this.material.map = this.gearDownTex;
+            this.material.map.offset.x = 5 * (1 / this.totalFrames);
+            this.material.needsUpdate = true;
+        }
+        if (this.emissiveTex && this.material) {
+            this.material.emissiveMap.offset.x = 5 * (1 / this.totalFrames);
+            this.material.needsUpdate = true;
+        }
         this.group.position.set(0, 6, 0);
         this.targetPosition.set(0, 6, 0);
         this.targetAltitude = 6;
@@ -130,6 +201,8 @@ export class HelicopterPlayer {
         this.rotorSpeed = 0;
         this.audioManager.stopAllAudio();
         this.crashHandler.hideRestart();
+        if (this.shadowMesh) this.shadowMesh.visible = true;
+        if (this.dropLine) this.dropLine.visible = true;
     }
 
     triggerCrash(isOceanCrash = false) {
@@ -137,6 +210,8 @@ export class HelicopterPlayer {
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
         this.isMoving = false;
+        if (this.shadowMesh) this.shadowMesh.visible = false;
+        if (this.dropLine) this.dropLine.visible = false;
         
         if (isOceanCrash) {
             this.audioManager.playSplash();
@@ -164,7 +239,7 @@ export class HelicopterPlayer {
                 if (this.engineState === 'STARTING') {
                     this.engineState = 'RUNNING';
                     this.audioManager.startRotor();
-                    this.targetAltitude = 16; 
+                    this.targetAltitude = 32; 
                 }
             });
         } else if (this.engineState === 'RUNNING') {
@@ -184,7 +259,7 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
-        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - 16) > 1.0) {
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - 32) > 1.0) {
             return;
         }
 
@@ -193,10 +268,10 @@ export class HelicopterPlayer {
         
         const snapThreshold = 8.0;
         if (clickPos2D.distanceTo(padCenter) < snapThreshold) {
-            this.targetPosition.set(0, 16, 0);
+            this.targetPosition.set(0, 32, 0);
         } else {
             this.targetPosition.copy(newPos);
-            this.targetPosition.y = 16; 
+            this.targetPosition.y = 32; 
         }
 
         this.isMoving = true;
@@ -278,31 +353,57 @@ export class HelicopterPlayer {
         const currentPos = this.group.position;
         currentPos.y = THREE.MathUtils.lerp(currentPos.y, this.targetAltitude, delta * 3.0);
 
-        if (this.engineState !== 'RUNNING' || Math.abs(currentPos.y - 16) > 1.0) {
+        if (this.shadowMesh && this.dropLine) {
+            this.shadowMesh.position.set(currentPos.x, 0.2, currentPos.z);
+            
+            const heightFactor = Math.max(0.4, 1.0 - (currentPos.y / 60.0));
+            this.shadowMesh.scale.set(heightFactor, heightFactor, heightFactor);
+
+            const positions = this.dropLine.geometry.attributes.position.array;
+            positions[0] = currentPos.x;
+            positions[1] = 0.2;
+            positions[2] = currentPos.z;
+
+            positions[3] = currentPos.x;
+            positions[4] = currentPos.y;
+            positions[5] = currentPos.z;
+
+            this.dropLine.geometry.attributes.position.needsUpdate = true;
+            this.dropLine.computeLineDistances();
+        }
+
+        if (this.engineState !== 'RUNNING' || Math.abs(currentPos.y - 32) > 1.0) {
             this.targetPosition.x = currentPos.x;
             this.targetPosition.z = currentPos.z;
             this.isMoving = false;
         }
 
         if (this.isMoving && this.engineState === 'RUNNING') {
-            const distance = new THREE.Vector2(currentPos.x, currentPos.z).distanceTo(new THREE.Vector2(this.targetPosition.x, this.targetPosition.z));
+            const targetXZ = new THREE.Vector2(this.targetPosition.x, this.targetPosition.z);
+            const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
+            const distance = currentXZ.distanceTo(targetXZ);
 
-            if (distance > 0.5) {
-                const dir = new THREE.Vector3().subVectors(this.targetPosition, currentPos);
-                dir.y = 0;
-                dir.normalize();
+            if (distance > 0.3) {
+                // Lower lerp value (0.8) makes acceleration much slower, heavier, and gradual
+                currentXZ.lerp(targetXZ, delta * 0.8);
                 
-                currentPos.x += dir.x * this.speed * delta;
-                currentPos.z += dir.z * this.speed * delta;
+                const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();
+                
+                currentPos.x = currentXZ.x;
+                currentPos.z = currentXZ.y;
 
-                const angle = Math.atan2(dir.z, dir.x) + Math.PI;
+                const angle = Math.atan2(moveDir.y, moveDir.x) + Math.PI;
                 let normalized = (angle + Math.PI * 2) % (Math.PI * 2);
                 
                 const frameIndex = Math.floor((normalized / (Math.PI * 2)) * this.totalFrames + 0.5) % this.totalFrames;
                 this.currentFrame = frameIndex;
 
+                const frameOffset = this.currentFrame * (1 / this.totalFrames);
                 if (this.material.map) {
-                    this.material.map.offset.x = this.currentFrame * (1 / this.totalFrames);
+                    this.material.map.offset.x = frameOffset;
+                }
+                if (this.material.emissiveMap) {
+                    this.material.emissiveMap.offset.x = frameOffset;
                 }
             } else {
                 this.isMoving = false;
