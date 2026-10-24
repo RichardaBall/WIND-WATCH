@@ -6,7 +6,6 @@ export class MissionManager {
         this.navRadar = navRadar;
         this.windFarm = windFarm;
         this.helicopterSystems = helicopterSystems;
-        this.missions = new Map();
 
         this.missionState = 'READY'; // READY, ACTIVE, COMPLETED
         this.currentMissionType = null;
@@ -14,20 +13,33 @@ export class MissionManager {
 
         this.registerPermanentLandmarks();
         
-        // Delay initial mission spawn slightly to ensure WindFarm turbines are fully initialized
         setTimeout(() => {
             this.spawnNextMission();
         }, 100);
     }
 
     registerPermanentLandmarks() {
-        // Main Base (Blue)
+        // Main Base (Blue) - Always points to Base
         this.navRadar.addOrUpdateMarker('main_base', new THREE.Vector3(0, 0, 0), '#3498db', 'BASE');
         
-        // Wind Farm (Green initially)
-        if (this.windFarm) {
-            this.navRadar.addOrUpdateMarker('wind_farm', this.windFarm, '#2ecc71', 'WIND');
+        // Wind Farm Center Point (Green)
+        if (this.windFarm && this.windFarm.turbines.length > 0) {
+            const centerPos = this.getWindFarmCenter();
+            this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#2ecc71', 'WIND');
         }
+    }
+
+    getWindFarmCenter() {
+        if (!this.windFarm || this.windFarm.turbines.length === 0) return new THREE.Vector3(380, 20, -320);
+        const center = new THREE.Vector3();
+        this.windFarm.turbines.forEach(turbine => {
+            const pos = new THREE.Vector3();
+            turbine.group.getWorldPosition(pos);
+            center.add(pos);
+        });
+        center.divideScalar(this.windFarm.turbines.length);
+        center.y += 20; // Hub height
+        return center;
     }
 
     spawnNextMission() {
@@ -40,8 +52,10 @@ export class MissionManager {
         if (chosenType === 'WTG_FIRE' && this.windFarm && this.windFarm.turbines.length > 0) {
             this.currentTurbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
             this.windFarm.setTurbineFire(this.currentTurbineIndex, true);
-            const turbinePos = this.windFarm.getTurbineWorldPosition(this.currentTurbineIndex);
-            this.navRadar.addOrUpdateMarker('wind_farm', turbinePos, '#e74c3c', 'FIRE!');
+            
+            // Turn the wind farm pointer RED during an active fire mission
+            const centerPos = this.getWindFarmCenter();
+            this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#e74c3c', 'FIRE!');
             console.log(`🔥 New WTG Fire Mission Spawned on turbine index ${this.currentTurbineIndex}!`);
         }
     }
@@ -88,7 +102,11 @@ export class MissionManager {
                 const isOnFire = this.windFarm.isTurbineOnFire(this.currentTurbineIndex);
                 if (!isOnFire) {
                     this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
-                    this.navRadar.addOrUpdateMarker('wind_farm', this.windFarm, '#2ecc71', 'WIND');
+                    
+                    // Turn the wind farm pointer back to GREEN once extinguished
+                    const centerPos = this.getWindFarmCenter();
+                    this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#2ecc71', 'WIND');
+                    
                     console.log('🎉 WTG Fire Extinguished! Return to Main Base to restock & spawn next mission.');
                     this.missionState = 'COMPLETED';
                 } else {

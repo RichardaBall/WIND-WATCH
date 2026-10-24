@@ -1,116 +1,101 @@
+// hudManager.js
+import * as THREE from 'three';
+
 export class HudManager {
     constructor() {
         this.createResourceHud();
     }
 
     createResourceHud() {
-        const svgContainer = document.createElement('div');
-        svgContainer.id = 'curved-resources-hud';
-        svgContainer.style.cssText = `
-            position: absolute;
-            bottom: 15px;
+        const hudContainer = document.createElement('div');
+        hudContainer.id = 'glass-aviation-hud';
+        hudContainer.style.cssText = `
+            position: fixed;
+            bottom: 25px;
             left: 50%;
             transform: translateX(-50%);
-            width: 320px;
-            height: 170px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
             pointer-events: none;
             z-index: 999;
+            font-family: monospace;
         `;
 
-        svgContainer.innerHTML = `
-            <svg width="320" height="170" viewBox="0 0 320 170" style="overflow: visible;">
-                <defs>
-                    <!-- CRT Radar Green Glow & Style -->
-                    <filter id="radarGlow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="3" result="blur" />
-                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                    </filter>
-                </defs>
+        hudContainer.innerHTML = `
+            <!-- FUEL GAUGE -->
+            <div style="display: flex; flex-direction: column; align-items: center; padding: 4px;">
+                <div style="font-size: 9px; color: rgba(255, 255, 255, 0.7); margin-bottom: 4px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">FUEL</div>
+                <div style="width: 6px; height: 50px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 0 6px rgba(0,0,0,0.5);">
+                    <div id="fuel-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #3b82f6, #60a5fa); border-radius: 3px; transition: height 0.2s;"></div>
+                </div>
+            </div>
 
-                <!-- FUEL TUBE (Left Arc) -->
-                <!-- Background / Empty tube (Dark Radar Green) -->
-                <path d="M 16 155 A 144 144 0 0 1 160 11" fill="none" stroke="rgba(10, 45, 20, 0.9)" stroke-width="8" stroke-linecap="round" />
-                <path d="M 16 155 A 144 144 0 0 1 160 11" fill="none" stroke="rgba(46, 204, 113, 0.15)" stroke-width="6" stroke-linecap="round" />
-                <!-- Active Fluid Level (Vibrant Radar Green) -->
-                <path id="fuel-liquid-path" d="M 16 155 A 144 144 0 0 1 160 11" fill="none" stroke="#2ecc71" stroke-width="4.5" stroke-linecap="round" filter="url(#radarGlow)" style="stroke-dasharray: 226; stroke-dashoffset: 0;" />
-                <path d="M 16 155 A 144 144 0 0 1 160 11" fill="none" stroke="rgba(255, 255, 255, 0.35)" stroke-width="1.2" stroke-linecap="round" transform="translate(0, -1)" />
+            <!-- CENTRAL STATUS TEXT (Tool, Gear, Light) -->
+            <div style="display: flex; gap: 12px; align-items: center; text-shadow: 0 1px 4px rgba(0,0,0,0.9);">
+                <div id="box-tool" style="color: #60a5fa; font-size: 11px; font-weight: bold; letter-spacing: 1px;">WATER</div>
+                <div style="color: rgba(255, 255, 255, 0.3); font-size: 10px;">|</div>
+                <div id="box-gear" style="color: #ffffff; font-size: 11px; font-weight: bold; letter-spacing: 1px;">GEAR DOWN</div>
+                <div style="color: rgba(255, 255, 255, 0.3); font-size: 10px;">|</div>
+                <div id="box-light" style="color: rgba(255, 255, 255, 0.5); font-size: 11px; font-weight: bold; letter-spacing: 1px;">LIGHT OFF</div>
+            </div>
 
-                <!-- WATER TUBE (Right Arc) -->
-                <!-- Background / Empty tube (Dark Radar Green) -->
-                <path d="M 160 11 A 144 144 0 0 1 304 155" fill="none" stroke="rgba(10, 45, 20, 0.9)" stroke-width="8" stroke-linecap="round" />
-                <path d="M 160 11 A 144 144 0 0 1 304 155" fill="none" stroke="rgba(46, 204, 113, 0.15)" stroke-width="6" stroke-linecap="round" />
-                <!-- Active Fluid Level (Vibrant Radar Green) -->
-                <path id="water-liquid-path" d="M 160 11 A 144 144 0 0 1 304 155" fill="none" stroke="#2ecc71" stroke-width="4.5" stroke-linecap="round" filter="url(#radarGlow)" style="stroke-dasharray: 226; stroke-dashoffset: 0;" />
-                <path d="M 160 11 A 144 144 0 0 1 304 155" fill="none" stroke="rgba(255, 255, 255, 0.35)" stroke-width="1.2" stroke-linecap="round" transform="translate(0, -1)" />
-
-                <!-- THREE SMALL STATUS BOXES FITTED INSIDE THE BASE -->
-                
-                <!-- Left Box: Tool Mode -->
-                <g transform="translate(62, 162)">
-                    <rect width="65" height="18" rx="2" fill="rgba(10, 45, 20, 0.95)" stroke="#2ecc71" stroke-width="1" filter="url(#radarGlow)" />
-                    <text id="text-tool" x="30" y="12" fill="#2ecc71" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0.5">WATER</text>
-                </g>
-
-                <!-- Middle Box: Gear State -->
-                <g transform="translate(130, 162)">
-                    <rect width="65" height="18" rx="2" fill="rgba(10, 45, 20, 0.95)" stroke="#2ecc71" stroke-width="1" filter="url(#radarGlow)" />
-                    <text id="text-gear" x="30" y="12" fill="#2ecc71" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0.5">GEAR DOWN</text>
-                </g>
-
-                <!-- Right Box: Light State -->
-                <g transform="translate(198, 162)">
-                    <rect width="65" height="18" rx="2" fill="rgba(10, 45, 20, 0.95)" stroke="#2ecc71" stroke-width="1" filter="url(#radarGlow)" />
-                    <text id="text-light" x="30" y="12" fill="#2ecc71" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle" letter-spacing="0.5">LIGHT OFF</text>
-                </g>
-            </svg>
+            <!-- WATER GAUGE -->
+            <div style="display: flex; flex-direction: column; align-items: center; padding: 4px;">
+                <div style="font-size: 9px; color: rgba(255, 255, 255, 0.7); margin-bottom: 4px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">WATER</div>
+                <div style="width: 6px; height: 50px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 0 6px rgba(0,0,0,0.5);">
+                    <div id="water-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8); border-radius: 3px; transition: height 0.2s;"></div>
+                </div>
+            </div>
         `;
-        document.body.appendChild(svgContainer);
+        document.body.appendChild(hudContainer);
     }
 
     update(helicopterSystems, searchLightSystem) {
         if (!helicopterSystems) return;
 
-        // 1. Update Resource Gauges
+        // 1. Update Resource Bars
         const fuelPercent = Math.max(0, Math.min(100, Math.round(helicopterSystems.fuel)));
         const waterPercent = Math.max(0, Math.min(100, Math.round(helicopterSystems.water)));
 
-        const fuelPath = document.getElementById('fuel-liquid-path');
-        const waterPath = document.getElementById('water-liquid-path');
+        const fuelFill = document.getElementById('fuel-bar-fill');
+        const waterFill = document.getElementById('water-bar-fill');
 
-        const totalLength = 226.2; // Arc length for radius 144
-
-        if (fuelPath) {
-            const fuelOffset = totalLength * (1 - (fuelPercent / 100));
-            fuelPath.style.strokeDashoffset = fuelOffset;
+        if (fuelFill) {
+            fuelFill.style.height = `${fuelPercent}%`;
+            fuelFill.style.background = fuelPercent <= 20 ? 'linear-gradient(to top, #ef4444, #f87171)' : 'linear-gradient(to top, #3b82f6, #60a5fa)';
         }
 
-        if (waterPath) {
-            const waterOffset = totalLength * (waterPercent / 100) - totalLength;
-            waterPath.style.strokeDashoffset = waterOffset;
+        if (waterFill) {
+            waterFill.style.height = `${waterPercent}%`;
         }
 
         // 2. Update Tool Mode Box
-        const textTool = document.getElementById('text-tool');
-        if (textTool) {
-            textTool.textContent = helicopterSystems.activeToolKey === 'WATER' ? 'WATER' : 'WINCH';
+        const boxTool = document.getElementById('box-tool');
+        if (boxTool) {
+            boxTool.textContent = helicopterSystems.activeToolKey === 'WATER' ? 'WATER' : 'WINCH';
         }
 
         // 3. Update Landing Gear Box
         const player = helicopterSystems.playerRef;
-        const textGear = document.getElementById('text-gear');
-        if (textGear && player) {
-            textGear.textContent = player.gearDown ? 'GEAR DOWN' : 'GEAR UP';
+        const boxGear = document.getElementById('box-gear');
+        if (boxGear && player) {
+            boxGear.textContent = player.gearDown ? 'GEAR DOWN' : 'GEAR UP';
+            boxGear.style.color = player.gearDown ? '#ffffff' : '#93c5fd';
         }
 
         // 4. Update Searchlight Box
-        const textLight = document.getElementById('text-light');
-        if (textLight && searchLightSystem) {
+        const boxLight = document.getElementById('box-light');
+        if (boxLight && searchLightSystem) {
             if (searchLightSystem.state === 'OFF') {
-                textLight.textContent = 'LIGHT OFF';
+                boxLight.textContent = 'LIGHT OFF';
+                boxLight.style.color = 'rgba(255, 255, 255, 0.5)';
             } else if (searchLightSystem.state === 'LOCKED') {
-                textLight.textContent = 'LIGHT LOCKED';
+                boxLight.textContent = 'LIGHT LOCKED';
+                boxLight.style.color = '#f59e0b';
             } else {
-                textLight.textContent = 'LIGHT ON';
+                boxLight.textContent = 'LIGHT ON';
+                boxLight.style.color = '#34d399';
             }
         }
     }

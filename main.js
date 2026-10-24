@@ -1,3 +1,4 @@
+// main.js
 import * as THREE from 'three';
 import { setupScene } from './sceneSetup.js';
 import { OceanWater } from './ocean.js';
@@ -11,6 +12,7 @@ import { SearchLightSystem } from './searchlight.js';
 import { NavRadar } from './navRadar.js';
 import { InputManager } from './inputManager.js';
 import { MissionManager } from './missionManager.js';
+import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
@@ -23,9 +25,10 @@ const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 const player = new HelicopterPlayer(scene);
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
-const navRadar = new NavRadar(scene, player);
+const navRadar = new NavRadar(scene, player, camera);
 
 // Initialize modular managers
+const collisionManager = new CollisionManager(scene, player, windFarm);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
 const hudManager = new HudManager();
 
@@ -54,6 +57,7 @@ function animate() {
 
     player.update(delta);
     helicopterSystems.update(delta);
+    collisionManager.update();
     missionManager.update(delta, player.getPosition());
     hudManager.update(helicopterSystems, searchLightSystem);
 
