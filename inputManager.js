@@ -1,3 +1,4 @@
+// inputManager.js
 import * as THREE from 'three';
 
 export class InputManager {
@@ -12,6 +13,14 @@ export class InputManager {
         this.mouse = new THREE.Vector2();
         this.planeIntersectTarget = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         this.isMouseDown = false;
+
+        // Clean up any old stray radar hud elements if present
+        const oldRadar = document.getElementById('nav-radar-hud');
+        if (oldRadar) oldRadar.remove();
+
+        // Fix zoom at a fixed position
+        this.camera.zoom = 1.0;
+        this.camera.updateProjectionMatrix();
 
         this.initListeners();
     }
@@ -81,10 +90,7 @@ export class InputManager {
             }
         });
 
-        window.addEventListener('wheel', (e) => {
-            this.camera.zoom = Math.max(0.5, Math.min(2.5, this.camera.zoom - e.deltaY * 0.001));
-            this.camera.updateProjectionMatrix();
-        });
+        // Zoom wheel listener removed to lock camera zoom in place
     }
 
     updateMouseCoords(e) {
