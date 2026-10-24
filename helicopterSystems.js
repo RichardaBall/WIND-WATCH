@@ -25,6 +25,16 @@ export class HelicopterSystems {
     }
 
     setTool(toolKey) {
+        // Prevent switching to WATER mode if winch is deployed or active
+        if (toolKey === 'WATER') {
+            const winchStowed = this.playerRef && this.playerRef.winchState === 'STOWED';
+            const atCruiseHeight = this.playerRef && Math.abs(this.playerRef.getPosition().y - 32.0) < 2.0;
+            if (!winchStowed || !atCruiseHeight) {
+                console.log("Cannot switch to Water mode unless at cruise height and winch is stowed!");
+                return;
+            }
+        }
+
         if (this.tools[toolKey]) {
             if (this.activeToolKey === 'WATER' && toolKey !== 'WATER') {
                 this.tools['WATER'].stop();
@@ -76,9 +86,10 @@ export class HelicopterSystems {
         // Deplete fuel only when the engine state is RUNNING
         const engineRunning = this.playerRef && this.playerRef.engineState === 'RUNNING';
         if (engineRunning) {
-            this.fuel = Math.max(0, this.fuel - delta * 1.0);
+            const gearIsDown = this.playerRef && this.playerRef.gearDown;
+            const fuelBurnRate = gearIsDown ? 1.2 : 1.0;
+            this.fuel = Math.max(0, this.fuel - delta * fuelBurnRate);
 
-            // Trigger low fuel warning sound once when fuel drops to 20%
             if (this.fuel <= 20 && !this.lowFuelTriggered) {
                 this.lowFuelTriggered = true;
                 if (this.playerRef && this.playerRef.audioManager) {
@@ -95,7 +106,6 @@ export class HelicopterSystems {
             }
         }
 
-        // Reset low fuel trigger if refueled back above 20%
         if (this.fuel > 20) {
             this.lowFuelTriggered = false;
         }

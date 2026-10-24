@@ -117,6 +117,10 @@ export class WinchSystem {
             if (this.playerRef && this.playerRef.audioManager) {
                 this.playerRef.audioManager.startWinch();
             }
+            // Immediately command helicopter to stop and lock in place while winch raises
+            if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
+                this.playerRef.startRetraction();
+            }
             console.log("Winch System: Retracting cable before climbing...");
         }
     }
@@ -165,11 +169,8 @@ export class WinchSystem {
 
         // If deactivated and cable is fully retracted, command heli to climb back up
         if (!this.isActive && this.currentExtension < 0.01) {
-            if (this.playerRef && typeof this.playerRef.setWinchMode === 'function') {
-                if (this.playerRef.isWinchActive) {
-                    this.playerRef.setWinchMode(false);
-                    console.log("Winch fully retracted: Climbing back to cruise altitude.");
-                }
+            if (this.playerRef && typeof this.playerRef.finishRetraction === 'function') {
+                this.playerRef.finishRetraction();
             }
         }
 
@@ -213,9 +214,9 @@ export class WinchSystem {
             }
         }
 
-        // Spawn rotor wash particles whenever hovering low (at winch height or lower), independent of winch extension state
+        // Spawn rotor wash particles whenever hovering low
         const overHelipad = this.isOverHelipad(heliWorldPos);
-        const isLowHover = heliWorldPos.y <= 15.0; // Active during winch height hover regardless of cable retraction state
+        const isLowHover = heliWorldPos.y <= 15.0;
 
         if (!overHelipad && !this.isDescendingForWinch && isLowHover && heightAboveWater > 0 && heightAboveWater <= 35.0) {
             const intensity = Math.max(0, (35.0 - heightAboveWater) / 35.0);

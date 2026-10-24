@@ -59,6 +59,8 @@ export class HelicopterPlayer {
 
         this.gearDown = true;
         this.isWinchActive = false;
+        this.winchState = 'STOWED'; // 'STOWED', 'DESCENDING', 'LOWERING', 'DEPLOYED', 'RAISING', 'CLIMBING'
+        this.winchTimer = 0;
 
         // --- Belly Night Searchlight Setup ---
         this.searchLight = new THREE.SpotLight(0xffffee, 0.0, 120.0, Math.PI / 5, 0.4, 1.5);
@@ -168,6 +170,7 @@ export class HelicopterPlayer {
 
         this.engineState = 'OFF'; 
         this.targetAltitude = 6;  
+        this.verticalVelocity = 0;
 
         this.audioManager = new AudioManager();
         
@@ -196,7 +199,10 @@ export class HelicopterPlayer {
         this.engineState = 'OFF';
         this.gearDown = true;
         this.isWinchActive = false;
+        this.winchState = 'STOWED';
+        this.winchTimer = 0;
         this.currentFrame = 5;
+        this.verticalVelocity = 0;
         if (this.gearDownTex && this.material) {
             this.material.map = this.gearDownTex;
             this.material.map.offset.x = 5 * (1 / this.totalFrames);
@@ -223,6 +229,7 @@ export class HelicopterPlayer {
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
         this.isMoving = false;
+        this.verticalVelocity = 0;
         this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
         if (this.dropLine) this.dropLine.visible = false;
@@ -237,9 +244,31 @@ export class HelicopterPlayer {
     }
 
     setWinchMode(isWinchActive) {
-        this.isWinchActive = isWinchActive;
-        if (this.engineState === 'RUNNING') {
-            this.targetAltitude = isWinchActive ? 12.0 : 32.0;
+        if (this.hasCrashed || this.engineState !== 'RUNNING') return;
+
+        if (isWinchActive) {
+            if (this.winchState === 'STOWED') {
+                this.isWinchActive = true;
+                this.winchState = 'DESCENDING';
+                this.targetAltitude = 12.0;
+            }
+        }
+    }
+
+    startRetraction() {
+        if (this.hasCrashed || this.engineState !== 'RUNNING') return;
+        if (this.winchState === 'DEPLOYED') {
+            this.winchState = 'RAISING';
+            this.targetAltitude = 12.0;
+            this.isMoving = false;
+            this.targetPosition.copy(this.group.position);
+        }
+    }
+
+    finishRetraction() {
+        if (this.winchState === 'RAISING') {
+            this.winchState = 'CLIMBING';
+            this.targetAltitude = 32.0;
         }
     }
 
@@ -254,7 +283,6 @@ export class HelicopterPlayer {
         this.targetPosition.copy(this.group.position);
         this.isMoving = false;
 
-        // Overlap shutdown sound while rotor is winding down
         this.audioManager.playShutdown(() => {
             this.audioManager.stopRotor();
         }, () => {
@@ -275,7 +303,6 @@ export class HelicopterPlayer {
             this.isMoving = false;
             this.flightStarted = true;
             
-            // Overlap startup into rotor sound slightly before startup audio fully ends
             this.audioManager.playStartup(() => {
                 if (this.engineState === 'STARTING') {
                     this.audioManager.startRotor();
@@ -292,8 +319,13 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
-        const activeCruiseHeight = this.isWinchActive ? 12.0 : 32.0;
-        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - activeCruiseHeight) > 2.0) {
+        // Prevent movement controls strictly during LOWERING or RAISING winch operations
+        if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
+            return;
+        }
+
+        const currentTargetAlt = (this.winchState === 'STOWED' || this.winchState === 'CLIMBING') ? 32.0 : 12.0;
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - currentTargetAlt) > 15.0) {
             return;
         }
 
@@ -302,10 +334,10 @@ export class HelicopterPlayer {
         
         const snapThreshold = 8.0;
         if (clickPos2D.distanceTo(padCenter) < snapThreshold) {
-            this.targetPosition.set(0, activeCruiseHeight, 0);
+            this.targetPosition.set(0, currentTargetAlt, 0);
         } else {
             this.targetPosition.copy(newPos);
-            this.targetPosition.y = activeCruiseHeight; 
+            this.targetPosition.y = currentTargetAlt; 
         }
 
         this.isMoving = true;
@@ -337,7 +369,6 @@ export class HelicopterPlayer {
     update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
 
-        // Dynamically scale searchlight intensity based on night factor
         this.searchLight.intensity = (this.engineState === 'RUNNING') ? (nightFactor * 65.0) : 0.0;
 
         const padCenter = new THREE.Vector2(0, 0);
@@ -356,6 +387,36 @@ export class HelicopterPlayer {
                     this.triggerCrash(false);
                     return;
                 }
+            }
+        }
+
+        // Handle Winch State Machine Transitions & Timers
+        if (this.winchState === 'DESCENDING') {
+            this.targetAltitude = 12.0;
+            if (Math.abs(this.group.position.y - 12.0) < 1.0) {
+                this.winchState = 'LOWERING';
+                this.winchTimer = 1.5; // duration to lower winch
+                this.isMoving = false;
+                this.targetPosition.copy(this.group.position);
+            }
+        } else if (this.winchState === 'LOWERING') {
+            this.targetAltitude = 12.0;
+            this.isMoving = false;
+            this.targetPosition.copy(this.group.position);
+            this.winchTimer -= delta;
+            if (this.winchTimer <= 0) {
+                this.winchState = 'DEPLOYED'; // Winch lowered, player can move again freely at 50% speed
+            }
+        } else if (this.winchState === 'RAISING') {
+            this.targetAltitude = 12.0;
+            this.isMoving = false;
+            this.targetPosition.copy(this.group.position);
+            // Handled externally by WinchSystem calling finishRetraction() when cable is fully up
+        } else if (this.winchState === 'CLIMBING') {
+            this.targetAltitude = 32.0;
+            if (Math.abs(this.group.position.y - 32.0) < 1.0) {
+                this.isWinchActive = false;
+                this.winchState = 'STOWED';
             }
         }
 
@@ -388,9 +449,14 @@ export class HelicopterPlayer {
         }
 
         const currentPos = this.group.position;
-        currentPos.y = THREE.MathUtils.lerp(currentPos.y, this.targetAltitude, delta * 3.0);
+        
+        const altitudeError = this.targetAltitude - currentPos.y;
+        const verticalAccel = 2.5; 
+        const verticalDamping = 3.0; 
+        
+        this.verticalVelocity += (altitudeError * verticalAccel - this.verticalVelocity * verticalDamping) * delta;
+        currentPos.y += this.verticalVelocity * delta;
 
-        // Apply wind drift vector to position when running
         if (this.engineState === 'RUNNING') {
             currentPos.x += windForce.x * delta * 0.15;
             currentPos.z += windForce.z * delta * 0.15;
@@ -415,20 +481,24 @@ export class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        const activeCruiseHeight = this.isWinchActive ? 12.0 : 32.0;
-        if (this.engineState !== 'RUNNING' || Math.abs(currentPos.y - activeCruiseHeight) > 2.0) {
-            this.targetPosition.x = currentPos.x;
-            this.targetPosition.z = currentPos.z;
-            this.isMoving = false;
+        const activeCruiseHeight = (this.winchState === 'STOWED' && !this.isWinchActive) ? 32.0 : (this.winchState === 'CLIMBING' ? 32.0 : 12.0);
+        if (this.engineState !== 'RUNNING' || (Math.abs(currentPos.y - activeCruiseHeight) > 2.0 && this.winchState !== 'DESCENDING' && this.winchState !== 'CLIMBING')) {
+            if (this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+                this.targetPosition.x = currentPos.x;
+                this.targetPosition.z = currentPos.z;
+                this.isMoving = false;
+            }
         }
 
-        if (this.isMoving && this.engineState === 'RUNNING') {
+        if (this.isMoving && this.engineState === 'RUNNING' && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = new THREE.Vector2(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
 
             if (distance > 0.3) {
-                currentXZ.lerp(targetXZ, delta * 0.8);
+                const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
+                const speedMultiplier = isSlow ? 0.5 : 1.0;
+                currentXZ.lerp(targetXZ, delta * 0.8 * speedMultiplier);
                 
                 const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();
                 
