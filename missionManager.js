@@ -10,6 +10,7 @@ export class MissionManager {
         this.missionState = 'READY'; // READY, ACTIVE, COMPLETED
         this.currentMissionType = null;
         this.currentTurbineIndex = 0;
+        this.extinguishProgress = 0; // Tracks sustained water contact time
 
         this.registerPermanentLandmarks();
         
@@ -48,6 +49,7 @@ export class MissionManager {
 
         this.currentMissionType = chosenType;
         this.missionState = 'ACTIVE';
+        this.extinguishProgress = 0;
 
         if (chosenType === 'WTG_FIRE' && this.windFarm && this.windFarm.turbines.length > 0) {
             this.currentTurbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
@@ -114,8 +116,15 @@ export class MissionManager {
                     const dist = playerPosition.distanceTo(turbinePos);
                     const isSprayingWater = this.helicopterSystems.isWaterActive();
 
-                    if (dist < 35.0 && isSprayingWater) {
-                        this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
+                    // Smaller hitbox (15.0 units instead of 35.0) and requires ~3 seconds of continuous accurate water spray
+                    if (dist < 15.0 && isSprayingWater) {
+                        this.extinguishProgress += delta;
+                        if (this.extinguishProgress >= 3.0) {
+                            this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
+                        }
+                    } else {
+                        // Gradually reset progress if spray drifts off target
+                        this.extinguishProgress = Math.max(0, this.extinguishProgress - delta * 1.5);
                     }
                 }
             }
