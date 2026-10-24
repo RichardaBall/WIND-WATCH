@@ -1,3 +1,4 @@
+// helicopterSystems.js
 import * as THREE from 'three';
 import { WaterSystem } from './waterSystem.js';
 import { WinchSystem } from './winchSystem.js';
@@ -25,14 +26,13 @@ export class HelicopterSystems {
     }
 
     setTool(toolKey) {
-        // Prevent switching to WATER mode if winch is deployed or active
-        if (toolKey === 'WATER') {
-            const winchStowed = this.playerRef && this.playerRef.winchState === 'STOWED';
-            const atCruiseHeight = this.playerRef && Math.abs(this.playerRef.getPosition().y - 32.0) < 2.0;
-            if (!winchStowed || !atCruiseHeight) {
-                console.log("Cannot switch to Water mode unless at cruise height and winch is stowed!");
-                return;
-            }
+        // Prevent switching tools if either water spray or winch is currently active/deployed
+        const waterActive = this.tools['WATER'] && this.tools['WATER'].isActive;
+        const winchActive = this.playerRef && this.playerRef.winchState !== 'STOWED';
+
+        if (waterActive || winchActive) {
+            console.log("Cannot switch tools while a tool is currently active or deployed!");
+            return;
         }
 
         if (this.tools[toolKey]) {

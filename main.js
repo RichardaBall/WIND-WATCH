@@ -35,7 +35,7 @@ const navRadar = new NavRadar(scene, player, camera);
 // Initialize modular managers
 const collisionManager = new CollisionManager(scene, player, windFarm);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
-const hudManager = new HudManager();
+const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
 const settings = setupSettings(dayNightCycle, player, weatherSystem);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
