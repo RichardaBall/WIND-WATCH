@@ -277,10 +277,17 @@ export class HelicopterPlayer {
 
         const padCenter = new THREE.Vector2(0, 0);
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
-        const isOverOcean = pos2D.distanceTo(padCenter) > 10.0;
+        const distanceFromBase = pos2D.distanceTo(padCenter);
+        const isOverOcean = distanceFromBase > 5.0; // If outside 5 units, treat as over ocean / water
 
         this.engineState = 'SHUTTING_DOWN';
-        this.targetPosition.copy(this.group.position);
+        
+        if (!isOverOcean) {
+            this.targetPosition.set(0, 6.0, 0);
+        } else {
+            this.targetPosition.copy(this.group.position);
+        }
+        
         this.isMoving = false;
 
         this.audioManager.playShutdown(() => {
@@ -332,7 +339,7 @@ export class HelicopterPlayer {
         const padCenter = new THREE.Vector2(0, 0);
         const clickPos2D = new THREE.Vector2(newPos.x, newPos.z);
         
-        const snapThreshold = 8.0;
+        const snapThreshold = 5.0;
         if (clickPos2D.distanceTo(padCenter) < snapThreshold) {
             this.targetPosition.set(0, currentTargetAlt, 0);
         } else {
@@ -374,7 +381,7 @@ export class HelicopterPlayer {
         const padCenter = new THREE.Vector2(0, 0);
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
         const distanceFromBase = pos2D.distanceTo(padCenter);
-        const isOverOcean = distanceFromBase > 10.0;
+        const isOverOcean = distanceFromBase > 5.0;
 
         if (this.flightStarted) {
             if (isOverOcean && this.group.position.y <= 1.0) {
@@ -457,6 +464,12 @@ export class HelicopterPlayer {
         this.verticalVelocity += (altitudeError * verticalAccel - this.verticalVelocity * verticalDamping) * delta;
         currentPos.y += this.verticalVelocity * delta;
 
+        // Smoothly glide horizontal position toward helipad center during shutdown only if within the 5.0 unit radius
+        if (this.engineState === 'SHUTTING_DOWN' && distanceFromBase < 5.0) {
+            currentPos.x = THREE.MathUtils.lerp(currentPos.x, 0.0, delta * 3.0);
+            currentPos.z = THREE.MathUtils.lerp(currentPos.z, 0.0, delta * 3.0);
+        }
+
         if (this.engineState === 'RUNNING') {
             currentPos.x += windForce.x * delta * 0.15;
             currentPos.z += windForce.z * delta * 0.15;
@@ -483,7 +496,7 @@ export class HelicopterPlayer {
 
         const activeCruiseHeight = (this.winchState === 'STOWED' && !this.isWinchActive) ? 32.0 : (this.winchState === 'CLIMBING' ? 32.0 : 12.0);
         if (this.engineState !== 'RUNNING' || (Math.abs(currentPos.y - activeCruiseHeight) > 2.0 && this.winchState !== 'DESCENDING' && this.winchState !== 'CLIMBING')) {
-            if (this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+            if (this.winchState !== 'LOWERING' && this.winchState !== 'RAISING' && this.engineState !== 'SHUTTING_DOWN') {
                 this.targetPosition.x = currentPos.x;
                 this.targetPosition.z = currentPos.z;
                 this.isMoving = false;
