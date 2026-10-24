@@ -15,6 +15,7 @@ import { MissionManager } from './missionManager.js';
 import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
+import { LiferaftMission } from './liferaftMission.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
@@ -31,6 +32,7 @@ const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManage
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
+const liferaftMission = new LiferaftMission(scene, player, navRadar, searchLightSystem);
 
 // Initialize modular managers
 const collisionManager = new CollisionManager(scene, player, windFarm);
@@ -73,6 +75,7 @@ function animate() {
 
     searchLightSystem.update(delta, nightFactor, mouseWorldPos);
     navRadar.update();
+    liferaftMission.update(delta, camera.quaternion, nightFactor, searchLightSystem);
 
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);
@@ -88,7 +91,7 @@ function animate() {
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
 
-    mainBase.update(nightFactor, camera.quaternion);
+    mainBase.update(nightFactor, camera.quaternion, searchLightSystem);
     windFarm.update(delta, camera.quaternion);
     
     player.mesh.quaternion.copy(camera.quaternion);

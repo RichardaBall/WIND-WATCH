@@ -136,8 +136,24 @@ export class MainBase {
         });
     }
 
-    update(nightFactor, cameraQuaternion) {
-        this.material.color.setRGB(1 - nightFactor * 0.4, 1 - nightFactor * 0.4, 1 - nightFactor * 0.3);
+    update(nightFactor, cameraQuaternion, searchLightSystem = null) {
+        let baseColorFactor = 1 - nightFactor * 0.4;
+        let baseBlueFactor = 1 - nightFactor * 0.3;
+
+        if (searchLightSystem && searchLightSystem.state !== 'OFF') {
+            const lightPos = searchLightSystem.lightPoolMesh.position;
+            const basePos = this.group.position;
+            const dx = basePos.x - lightPos.x;
+            const dz = basePos.z - lightPos.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+
+            if (dist < 10.0) {
+                baseColorFactor = 1.0;
+                baseBlueFactor = 1.0;
+            }
+        }
+
+        this.material.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);
 
         if (this.foamMaterial) {
             const baseOp = this.foamParams.opacity;

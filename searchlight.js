@@ -7,8 +7,8 @@ export class SearchLightSystem {
         this.state = 'OFF';
         this.lockedPosition = new THREE.Vector3();
 
-        // Balanced spotlight intensity and softer penumbra for a clean daylight beam look
-        this.spotLight = new THREE.SpotLight(0xfff8e7, 0.0, 180, Math.PI / 6, 0.5, 1.2);
+        // High-intensity daylight searchlight with pure white color and balanced attenuation for vibrant daytime illumination
+        this.spotLight = new THREE.SpotLight(0xffffff, 0.0, 250, Math.PI / 6, 0.3, 1.0);
         this.spotLight.position.set(0, -0.5, 0);
         this.playerGroup.add(this.spotLight);
 
@@ -26,8 +26,8 @@ export class SearchLightSystem {
         canvas.height = 128;
         const ctx = canvas.getContext('2d');
         const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        gradient.addColorStop(0, 'rgba(255, 255, 250, 0.95)');
-        gradient.addColorStop(0.6, 'rgba(220, 235, 255, 0.6)');
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        gradient.addColorStop(0.6, 'rgba(230, 240, 255, 0.7)');
         gradient.addColorStop(1, 'rgba(200, 220, 255, 0)');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 128, 128);
@@ -69,9 +69,9 @@ export class SearchLightSystem {
             return;
         }
 
-        // Balanced intensity so it reveals details like daylight without washing out the screen
-        this.spotLight.intensity = nightFactor * 22.0;
-        this.lightPoolMesh.material.opacity = nightFactor * 0.85;
+        // Full daytime illumination intensity inside the light cone at night
+        this.spotLight.intensity = nightFactor * 90.0;
+        this.lightPoolMesh.material.opacity = nightFactor * 0.9;
 
         // Determine target based on current state
         let targetPos = (this.state === 'LOCKED') ? this.lockedPosition : mouseWorldPos;
