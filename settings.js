@@ -1,7 +1,7 @@
 // settings.js
 import * as THREE from 'three';
 
-export function setupSettings(dayNightCycle, player) {
+export function setupSettings(dayNightCycle, player, weatherSystem) {
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.top = '60px';
@@ -19,9 +19,10 @@ export function setupSettings(dayNightCycle, player) {
     container.style.boxShadow = '0 10px 25px rgba(0,0,0,0.7)';
 
     const title = document.createElement('div');
-    title.innerHTML = '<strong>Dev Settings</strong> (Press <strong>T</strong>)';
+    title.innerHTML = '<strong>Settings</strong>';
     title.style.marginBottom = '12px';
     title.style.color = '#60a5fa';
+    title.style.textAlign = 'center';
     container.appendChild(title);
 
     const btnContainer = document.createElement('div');
@@ -60,6 +61,28 @@ export function setupSettings(dayNightCycle, player) {
     heliVisBtn.style.cursor = 'pointer';
     btnContainer.appendChild(heliVisBtn);
 
+    // Weather Override Button (Cycles through all 6 weather states)
+    const weatherBtn = document.createElement('button');
+    weatherBtn.innerText = 'Weather: CLEAR';
+    weatherBtn.style.padding = '6px 12px';
+    weatherBtn.style.background = '#1a365d';
+    weatherBtn.style.color = '#ffffff';
+    weatherBtn.style.border = '1px solid #4a90e2';
+    weatherBtn.style.borderRadius = '4px';
+    weatherBtn.style.cursor = 'pointer';
+    weatherBtn.onclick = () => {
+        if (weatherSystem && typeof weatherSystem.setWeather === 'function') {
+            const sequence = ['CLEAR', 'RAIN', 'FOG', 'RAIN_FOG', 'STORM', 'SNOW', 'SNOW_FOG'];
+            const currentIndex = sequence.indexOf(weatherSystem.targetWeather);
+            const nextIndex = (currentIndex + 1) % sequence.length;
+            const next = sequence[nextIndex];
+            
+            weatherSystem.setWeather(next);
+            weatherBtn.innerText = `Weather: ${next}`;
+        }
+    };
+    btnContainer.appendChild(weatherBtn);
+
     const controlsBtn = document.createElement('button');
     controlsBtn.innerText = 'Controls';
     controlsBtn.style.padding = '6px 12px';
@@ -70,7 +93,7 @@ export function setupSettings(dayNightCycle, player) {
     controlsBtn.style.cursor = 'pointer';
     btnContainer.appendChild(controlsBtn);
 
-    // Controls Popup Window (positioned to the right of settings menu)
+    // Controls Popup Window
     const controlsModal = document.createElement('div');
     controlsModal.style.cssText = `
         position: absolute;
@@ -91,8 +114,9 @@ export function setupSettings(dayNightCycle, player) {
     `;
     controlsModal.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px;">
-            <strong style="font-size: 13px; letter-spacing: 1px; color: #60a5fa;">GAME CONTROLS</strong>
-            <button id="close-controls-modal" style="background: transparent; border: none; color: #ffffff; font-size: 14px; cursor: pointer; font-weight: bold;">&times;</button>
+            <div style="width: 20px;"></div>
+            <strong style="font-size: 13px; letter-spacing: 1px; color: #60a5fa; text-align: center; flex: 1;">GAME CONTROLS</strong>
+            <button id="close-controls-modal" style="background: transparent; border: none; color: #ffffff; font-size: 14px; cursor: pointer; font-weight: bold; width: 20px;">&times;</button>
         </div>
         <div style="display: flex; flex-direction: column; gap: 8px; color: #e2e8f0;">
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">Left Click & Drag</span><span>Set Destination</span></div>
@@ -103,7 +127,6 @@ export function setupSettings(dayNightCycle, player) {
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">1 Key</span><span>Select Water Tool</span></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">2 Key</span><span>Select Winch Tool</span></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">Spacebar</span><span>Activate Tool</span></div>
-            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">T Key</span><span>Toggle Settings Menu</span></div>
         </div>
     `;
     document.body.appendChild(controlsModal);
@@ -168,12 +191,6 @@ export function setupSettings(dayNightCycle, player) {
             }
         }
     };
-
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'KeyT' && !e.repeat) {
-            setVisible(!isVisible);
-        }
-    });
 
     return {
         setVisible(visible) {

@@ -14,6 +14,7 @@ import { InputManager } from './inputManager.js';
 import { MissionManager } from './missionManager.js';
 import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
+import { WeatherSystem } from './weatherSystem.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
@@ -23,6 +24,10 @@ const windFarm = new WindFarm(scene, camera);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 
 const player = new HelicopterPlayer(scene);
+
+// Pass player.audioManager into WeatherSystem so it has access to the audio context
+const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
+
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
@@ -32,7 +37,7 @@ const collisionManager = new CollisionManager(scene, player, windFarm);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
 const hudManager = new HudManager();
 
-const settings = setupSettings(dayNightCycle, player);
+const settings = setupSettings(dayNightCycle, player, weatherSystem);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 window.addEventListener('toggle-settings', (e) => {
@@ -54,8 +59,11 @@ function animate() {
     }
 
     const nightFactor = dayNightCycle.update(delta);
+    weatherSystem.update(delta);
 
-    player.update(delta);
+    const windForce = weatherSystem.getWindForce();
+    player.update(delta, nightFactor, windForce);
+    
     helicopterSystems.update(delta);
     collisionManager.update();
     missionManager.update(delta, player.getPosition());

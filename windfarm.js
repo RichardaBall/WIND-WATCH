@@ -52,6 +52,7 @@ export class WindFarm {
         this.bodyMaterial = new THREE.MeshStandardMaterial({
             transparent: true,
             alphaTest: 0.1,
+            depthWrite: true,
             roughness: 0.4,
             side: THREE.DoubleSide
         });

@@ -19,6 +19,7 @@ export class HelicopterPlayer {
             roughness: 0.4,
             transparent: true,
             alphaTest: 0.5,
+            depthWrite: true,
             side: THREE.DoubleSide,
             emissive: 0xffffff,
             emissiveIntensity: 2.0
@@ -333,7 +334,7 @@ export class HelicopterPlayer {
         this.audioManager.playGear();
     }
 
-    update(delta, nightFactor = 0.0) {
+    update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
 
         // Dynamically scale searchlight intensity based on night factor
@@ -389,6 +390,12 @@ export class HelicopterPlayer {
         const currentPos = this.group.position;
         currentPos.y = THREE.MathUtils.lerp(currentPos.y, this.targetAltitude, delta * 3.0);
 
+        // Apply wind drift vector to position when running
+        if (this.engineState === 'RUNNING') {
+            currentPos.x += windForce.x * delta * 0.15;
+            currentPos.z += windForce.z * delta * 0.15;
+        }
+
         if (this.shadowMesh && this.dropLine) {
             this.shadowMesh.position.set(currentPos.x, 0.2, currentPos.z);
             
@@ -421,7 +428,6 @@ export class HelicopterPlayer {
             const distance = currentXZ.distanceTo(targetXZ);
 
             if (distance > 0.3) {
-                // Lower lerp value (0.8) makes acceleration much slower, heavier, and gradual
                 currentXZ.lerp(targetXZ, delta * 0.8);
                 
                 const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();

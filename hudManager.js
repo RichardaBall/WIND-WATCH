@@ -81,7 +81,7 @@ export class HudManager {
         const boxGear = document.getElementById('box-gear');
         if (boxGear && player) {
             boxGear.textContent = player.gearDown ? 'GEAR DOWN' : 'GEAR UP';
-            boxGear.style.color = player.gearDown ? '#ffffff' : '#93c5fd';
+            boxGear.style.color = player.gearDown ? '#34d399' : '#93c5fd';
         }
 
         // 4. Update Searchlight Box
