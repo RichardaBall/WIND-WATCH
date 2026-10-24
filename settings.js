@@ -90,11 +90,36 @@ export function setupSettings(dayNightCycle, player) {
 
     document.body.appendChild(container);
 
-    let isVisible = false; // Initial state matches hidden display
+    let isVisible = false;
+
+    const setVisible = (visible) => {
+        isVisible = visible;
+        container.style.display = isVisible ? 'block' : 'none';
+        
+        // Keep the top-left settings button icon active state in sync if toggled via keypress 'T'
+        const settingsBtn = document.getElementById('settings-btn');
+        if (settingsBtn) {
+            if (isVisible) {
+                settingsBtn.classList.add('active');
+            } else {
+                settingsBtn.classList.remove('active');
+            }
+        }
+    };
+
     window.addEventListener('keydown', (e) => {
         if (e.code === 'KeyT' && !e.repeat) {
-            isVisible = !isVisible;
-            container.style.display = isVisible ? 'block' : 'none';
+            setVisible(!isVisible);
         }
     });
+
+    return {
+        setVisible(visible) {
+            setVisible(visible);
+        },
+        toggle() {
+            setVisible(!isVisible);
+            return isVisible;
+        }
+    };
 }

@@ -61,7 +61,7 @@ export class WindFarm {
             this.bodyMaterial.needsUpdate = true;
         });
 
-        // Create a wind farm array far away so they require radar tracking to locate
+        // Restored original wider wind farm layout
         const farmLayout = [
             { x: 380, z: -320 },
             { x: 440, z: -270 },
@@ -71,7 +71,7 @@ export class WindFarm {
         ];
 
         farmLayout.forEach((pos, index) => {
-            this.createTurbine(pos.x, pos.z, index === 0); // Make the first one in the distant farm active on fire by default
+            this.createTurbine(pos.x, pos.z, false);
         });
     }
 
@@ -146,13 +146,11 @@ export class WindFarm {
         const turbineGroup = new THREE.Group();
         turbineGroup.position.set(x, 0, z);
 
-        // 1. Turbine Static Body Mesh
         const bodyGeo = new THREE.PlaneGeometry(36, 36);
         const bodyMesh = new THREE.Mesh(bodyGeo, this.bodyMaterial);
         bodyMesh.position.set(0, 18, 0);
         turbineGroup.add(bodyMesh);
 
-        // 2. Rotor Hub Group
         const rotorGroup = new THREE.Group();
         rotorGroup.position.set(this.config.hubX, this.config.hubY, this.config.hubZ);
 
@@ -172,7 +170,6 @@ export class WindFarm {
 
         turbineGroup.add(rotorGroup);
 
-        // 3. Water Foam Ring Particle System
         const count = this.foamConfig.count;
         const foamGeometry = new THREE.BufferGeometry();
         const foamPositions = new Float32Array(count * 3);
@@ -219,7 +216,6 @@ export class WindFarm {
         foamParticleSystem.rotation.z = THREE.MathUtils.degToRad(this.foamConfig.rotZ);
         turbineGroup.add(foamParticleSystem);
 
-        // 4. Red Light Mesh
         const markerGeo = new THREE.SphereGeometry(1, 16, 16);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
         const lightMarker = new THREE.Mesh(markerGeo, markerMat);
@@ -231,7 +227,6 @@ export class WindFarm {
         pointLight.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
         turbineGroup.add(pointLight);
 
-        // 5. Spark Particle System
         const sparkCount = 100;
         const sparkGeometry = new THREE.BufferGeometry();
         const sparkPositions = new Float32Array(sparkCount * 3);
@@ -266,7 +261,6 @@ export class WindFarm {
         sparkSystem.frustumCulled = false;
         turbineGroup.add(sparkSystem);
 
-        // 6. Vertical Smoke Stack Particle System
         const stackCount = 60;
         const stackGeometry = new THREE.BufferGeometry();
         const stackPositions = new Float32Array(stackCount * 3);
@@ -295,7 +289,6 @@ export class WindFarm {
         stackSystem.frustumCulled = false;
         turbineGroup.add(stackSystem);
 
-        // 7. Electrical Spark Flash Light
         const sparkLight = new THREE.PointLight(0x00aaff, initialFireState ? 5.0 : 0.0, 20);
         sparkLight.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
         turbineGroup.add(sparkLight);
@@ -337,7 +330,7 @@ export class WindFarm {
         if (this.turbines[index]) {
             const pos = new THREE.Vector3();
             this.turbines[index].group.getWorldPosition(pos);
-            pos.y += 20; // Target the nacelle/fire area
+            pos.y += 20;
             return pos;
         }
         return new THREE.Vector3(380, 20, -320);
@@ -353,7 +346,6 @@ export class WindFarm {
         for (const turbine of this.turbines) {
             const elapsedTime = Date.now() * 0.001;
 
-            // Distance check to optimize CPU updates when far away
             let distSq = 0;
             if (camPos) {
                 const dx = turbine.group.position.x - camPos.x;
@@ -361,14 +353,11 @@ export class WindFarm {
                 distSq = dx * dx + dz * dz;
             }
 
-            // Only rotate blades if the turbine is NOT on fire
             if (!turbine.isSparking) {
                 turbine.rotor.rotation.z += this.config.speed * delta;
             }
 
-            // Only update heavy foam particle calculations if within 800 units of the camera
             if (!camPos || distSq < 800 * 800) {
-                // Water foam ring animation
                 for (let i = 0; i < turbine.foamAngles.length; i++) {
                     const idx = i * 3;
                     const angle = turbine.foamAngles[i];
@@ -388,11 +377,9 @@ export class WindFarm {
                 turbine.foamGeometry.attributes.position.needsUpdate = true;
             }
 
-            // Sparks & Smoke Stack animation when active (only updated when within range or active)
             if (turbine.isSparking && (!camPos || distSq < 1000 * 1000)) {
                 turbine.sparkLight.intensity = Math.random() > 0.3 ? 6.0 : 0.5;
 
-                // Spark burst physics
                 const sparkPos = turbine.sparkSystem.geometry.attributes.position.array;
                 for (let i = 0; i < turbine.sparkLifetimes.length; i++) {
                     const idx = i * 3;
@@ -416,7 +403,6 @@ export class WindFarm {
                 }
                 turbine.sparkSystem.geometry.attributes.position.needsUpdate = true;
 
-                // Vertical Smoke Stack rising animation
                 const stackPos = turbine.stackSystem.geometry.attributes.position.array;
                 for (let i = 0; i < turbine.stackOffsets.length; i++) {
                     const idx = i * 3;

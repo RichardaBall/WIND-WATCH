@@ -18,6 +18,11 @@ export class InputManager {
 
     initListeners() {
         window.addEventListener('pointerdown', (e) => {
+            // Ignore clicks originating on UI buttons or interactive overlays
+            if (e.target.closest('button') || e.target.closest('#settings-btn') || e.target.closest('#fullscreen-btn') || e.target.closest('div[style*="position: absolute"]')) {
+                return;
+            }
+
             if (e.button === 0) {
                 this.isMouseDown = true;
                 this.updateMouseCoords(e);

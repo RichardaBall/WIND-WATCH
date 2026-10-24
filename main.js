@@ -29,8 +29,15 @@ const navRadar = new NavRadar(scene, player);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
 const hudManager = new HudManager();
 
-setupSettings(dayNightCycle, player);
+const settings = setupSettings(dayNightCycle, player);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
+
+window.addEventListener('toggle-settings', (e) => {
+    const isOpen = e.detail.active;
+    if (settings && typeof settings.setVisible === 'function') {
+        settings.setVisible(isOpen);
+    }
+});
 
 const clock = new THREE.Clock();
 

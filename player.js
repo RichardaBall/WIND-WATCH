@@ -242,12 +242,31 @@ export class HelicopterPlayer {
         }
     }
 
-    handleEngineKey() {
-        if (this.hasCrashed) return;
+    shutdownEngine() {
+        if (this.hasCrashed || this.engineState !== 'RUNNING') return;
 
         const padCenter = new THREE.Vector2(0, 0);
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
         const isOverOcean = pos2D.distanceTo(padCenter) > 10.0;
+
+        this.engineState = 'SHUTTING_DOWN';
+        this.targetPosition.copy(this.group.position);
+        this.isMoving = false;
+
+        // Overlap shutdown sound while rotor is winding down
+        this.audioManager.playShutdown(() => {
+            this.audioManager.stopRotor();
+        }, () => {
+            if (this.engineState === 'SHUTTING_DOWN') {
+                this.engineState = 'OFF';
+            }
+        });
+
+        this.targetAltitude = isOverOcean ? 0.0 : 6.0; 
+    }
+
+    handleEngineKey() {
+        if (this.hasCrashed) return;
 
         if (this.engineState === 'OFF') {
             this.engineState = 'STARTING';
@@ -255,26 +274,19 @@ export class HelicopterPlayer {
             this.isMoving = false;
             this.flightStarted = true;
             
+            // Overlap startup into rotor sound slightly before startup audio fully ends
             this.audioManager.playStartup(() => {
                 if (this.engineState === 'STARTING') {
-                    this.engineState = 'RUNNING';
                     this.audioManager.startRotor();
+                }
+            }, () => {
+                if (this.engineState === 'STARTING') {
+                    this.engineState = 'RUNNING';
                     this.targetAltitude = this.isWinchActive ? 12.0 : 32.0; 
                 }
             });
         } else if (this.engineState === 'RUNNING') {
-            this.engineState = 'SHUTTING_DOWN';
-            this.targetPosition.copy(this.group.position);
-            this.isMoving = false;
-            this.audioManager.stopRotor();
-
-            this.targetAltitude = isOverOcean ? 0.0 : 6.0; 
-            
-            this.audioManager.playShutdown(() => {
-                if (this.engineState === 'SHUTTING_DOWN') {
-                    this.engineState = 'OFF';
-                }
-            });
+            this.shutdownEngine();
         }
     }
 

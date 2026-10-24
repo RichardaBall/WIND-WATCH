@@ -20,6 +20,8 @@ export class HelicopterSystems {
         this.fuel = 100;
         this.maxWater = 100;
         this.water = 100;
+
+        this.lowFuelTriggered = false;
     }
 
     setTool(toolKey) {
@@ -75,6 +77,27 @@ export class HelicopterSystems {
         const engineRunning = this.playerRef && this.playerRef.engineState === 'RUNNING';
         if (engineRunning) {
             this.fuel = Math.max(0, this.fuel - delta * 1.0);
+
+            // Trigger low fuel warning sound once when fuel drops to 20%
+            if (this.fuel <= 20 && !this.lowFuelTriggered) {
+                this.lowFuelTriggered = true;
+                if (this.playerRef && this.playerRef.audioManager) {
+                    this.playerRef.audioManager.playLowFuel();
+                    console.log("Low fuel warning triggered!");
+                }
+            }
+
+            if (this.fuel <= 0) {
+                if (this.playerRef && typeof this.playerRef.shutdownEngine === 'function') {
+                    this.playerRef.shutdownEngine();
+                    console.log("Fuel depleted! Initiating engine shutdown...");
+                }
+            }
+        }
+
+        // Reset low fuel trigger if refueled back above 20%
+        if (this.fuel > 20) {
+            this.lowFuelTriggered = false;
         }
 
         for (const key in this.tools) {

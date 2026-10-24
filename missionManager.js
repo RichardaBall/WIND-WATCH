@@ -10,9 +10,14 @@ export class MissionManager {
 
         this.missionState = 'READY'; // READY, ACTIVE, COMPLETED
         this.currentMissionType = null;
+        this.currentTurbineIndex = 0;
 
         this.registerPermanentLandmarks();
-        this.spawnNextMission();
+        
+        // Delay initial mission spawn slightly to ensure WindFarm turbines are fully initialized
+        setTimeout(() => {
+            this.spawnNextMission();
+        }, 100);
     }
 
     registerPermanentLandmarks() {
@@ -32,11 +37,12 @@ export class MissionManager {
         this.currentMissionType = chosenType;
         this.missionState = 'ACTIVE';
 
-        if (chosenType === 'WTG_FIRE' && this.windFarm) {
-            this.windFarm.setTurbineFire(0, true);
-            const turbinePos = this.windFarm.getTurbineWorldPosition(0);
+        if (chosenType === 'WTG_FIRE' && this.windFarm && this.windFarm.turbines.length > 0) {
+            this.currentTurbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
+            this.windFarm.setTurbineFire(this.currentTurbineIndex, true);
+            const turbinePos = this.windFarm.getTurbineWorldPosition(this.currentTurbineIndex);
             this.navRadar.addOrUpdateMarker('wind_farm', turbinePos, '#e74c3c', 'FIRE!');
-            console.log('🔥 New WTG Fire Mission Spawned! Radar marker changed to RED.');
+            console.log(`🔥 New WTG Fire Mission Spawned on turbine index ${this.currentTurbineIndex}!`);
         }
     }
 
@@ -65,10 +71,7 @@ export class MissionManager {
                 }
             }
 
-            // Calculate remaining audio time, ensuring we don't divide by zero
             const timeRemaining = Math.max(0.1, duration - currentTime);
-
-            // Proportional rates based on remaining deficit and remaining time
             const fuelDeficit = Math.max(0, this.helicopterSystems.maxFuel - this.helicopterSystems.fuel);
             const waterDeficit = Math.max(0, this.helicopterSystems.maxWater - this.helicopterSystems.water);
 
@@ -82,19 +85,19 @@ export class MissionManager {
         // Handle Active Mission Logic
         if (this.missionState === 'ACTIVE') {
             if (this.currentMissionType === 'WTG_FIRE') {
-                const isOnFire = this.windFarm.isTurbineOnFire(0);
+                const isOnFire = this.windFarm.isTurbineOnFire(this.currentTurbineIndex);
                 if (!isOnFire) {
-                    this.windFarm.setTurbineFire(0, false);
+                    this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
                     this.navRadar.addOrUpdateMarker('wind_farm', this.windFarm, '#2ecc71', 'WIND');
                     console.log('🎉 WTG Fire Extinguished! Return to Main Base to restock & spawn next mission.');
                     this.missionState = 'COMPLETED';
                 } else {
-                    const turbinePos = this.windFarm.getTurbineWorldPosition(0);
+                    const turbinePos = this.windFarm.getTurbineWorldPosition(this.currentTurbineIndex);
                     const dist = playerPosition.distanceTo(turbinePos);
                     const isSprayingWater = this.helicopterSystems.isWaterActive();
 
                     if (dist < 35.0 && isSprayingWater) {
-                        this.windFarm.setTurbineFire(0, false);
+                        this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
                     }
                 }
             }

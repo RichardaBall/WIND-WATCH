@@ -3,11 +3,13 @@ export class AudioManager {
         this.startupAudio = new Audio('enginestartup.mp3');
         this.shutdownAudio = new Audio('engineshutdown.mp3');
         this.gearAudio = new Audio('gear.mp3');
+        this.lowFuelAudio = new Audio('lowfuel.mp3');
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         this.audioCtx = new AudioContext();
         this.rotorBuffer = null;
         this.rotorSource = null;
+        this.rotorGainNode = null;
         this.sprayNoiseSource = null;
         this.sprayGainNode = null;
         this.winchNoiseSource = null;
@@ -36,24 +38,51 @@ export class AudioManager {
             .catch(e => console.warn("Error loading rotor sound buffer:", e));
     }
 
-    playStartup(onEnded) {
+    playStartup(onBlendingPoint, onEnded) {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.startupAudio.onended = onEnded;
         this.startupAudio.currentTime = 0;
-        this.startupAudio.play().catch(e => console.log("Startup audio play prevented:", e));
+
+        let blendedTriggered = false;
+        const checkOverlap = () => {
+            if (!blendedTriggered && this.startupAudio.duration) {
+                // Trigger rotor blending 0.8 seconds before startup finishes
+                if (this.startupAudio.currentTime >= this.startupAudio.duration - 0.8) {
+                    blendedTriggered = true;
+                    if (typeof onBlendingPoint === 'function') onBlendingPoint();
+                }
+            }
+            if (!this.startupAudio.paused && !this.startupAudio.ended) {
+                requestAnimationFrame(checkOverlap);
+            }
+        };
+
+        this.startupAudio.play().then(() => {
+            checkOverlap();
+        }).catch(e => console.log("Startup audio play prevented:", e));
     }
 
-    playShutdown(onEnded) {
+    playShutdown(onBlendingPoint, onEnded) {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.shutdownAudio.onended = onEnded;
         this.shutdownAudio.currentTime = 0;
         this.shutdownAudio.play().catch(e => console.log("Shutdown audio play prevented:", e));
+
+        if (typeof onBlendingPoint === 'function') {
+            onBlendingPoint(); // Trigger shutdown audio overlapping with running rotor
+        }
     }
 
     playGear() {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.gearAudio.currentTime = 0;
         this.gearAudio.play().catch(e => console.log("Gear audio play prevented:", e));
+    }
+
+    playLowFuel() {
+        if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        this.lowFuelAudio.currentTime = 0;
+        this.lowFuelAudio.play().catch(e => console.log("Low fuel audio play prevented:", e));
     }
 
     playExplosion() {
@@ -220,7 +249,7 @@ export class AudioManager {
 
                 const filter = this.audioCtx.createBiquadFilter();
                 filter.type = 'bandpass';
-                filter.frequency.setValueAtTime(350, this.audioCtx.currentTime); // Lower mechanical hum
+                filter.frequency.setValueAtTime(350, this.audioCtx.currentTime);
                 filter.Q.setValueAtTime(2.0, this.audioCtx.currentTime);
 
                 this.winchGainNode = this.audioCtx.createGain();
@@ -270,6 +299,8 @@ export class AudioManager {
         this.shutdownAudio.currentTime = 0;
         this.gearAudio.pause();
         this.gearAudio.currentTime = 0;
+        this.lowFuelAudio.pause();
+        this.lowFuelAudio.currentTime = 0;
     }
 
     startRotor() {
@@ -280,18 +311,37 @@ export class AudioManager {
             this.rotorSource = this.audioCtx.createBufferSource();
             this.rotorSource.buffer = this.rotorBuffer;
             this.rotorSource.loop = true;
-            this.rotorSource.connect(this.audioCtx.destination);
+
+            this.rotorGainNode = this.audioCtx.createGain();
+            this.rotorGainNode.gain.setValueAtTime(1.0, this.audioCtx.currentTime);
+
+            this.rotorSource.connect(this.rotorGainNode);
+            this.rotorGainNode.connect(this.audioCtx.destination);
             this.rotorSource.start(0);
         }
     }
 
     stopRotor() {
-        if (this.rotorSource) {
+        if (this.rotorSource && this.audioCtx) {
             try {
-                this.rotorSource.stop();
-            } catch (e) {}
-            this.rotorSource.disconnect();
-            this.rotorSource = null;
+                const now = this.audioCtx.currentTime;
+                if (this.rotorGainNode) {
+                    // Fade out rotor sound slightly over 1 second during shutdown overlap
+                    this.rotorGainNode.gain.setValueAtTime(this.rotorGainNode.gain.value, now);
+                    this.rotorGainNode.gain.linearRampToValueAtTime(0.001, now + 1.2);
+                }
+                setTimeout(() => {
+                    if (this.rotorSource) {
+                        try { this.rotorSource.stop(); } catch(e) {}
+                        this.rotorSource.disconnect();
+                        this.rotorSource = null;
+                        this.rotorGainNode = null;
+                    }
+                }, 1200);
+            } catch (e) {
+                this.rotorSource = null;
+                this.rotorGainNode = null;
+            }
         }
     }
 
