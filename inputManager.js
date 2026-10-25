@@ -18,7 +18,7 @@ export class InputManager {
         const oldRadar = document.getElementById('nav-radar-hud');
         if (oldRadar) oldRadar.remove();
 
-        // Fix zoom at a fixed position
+        // Set initial zoom to 1.0 (max zoomed out)
         this.camera.zoom = 1.0;
         this.camera.updateProjectionMatrix();
 
@@ -90,7 +90,16 @@ export class InputManager {
             }
         });
 
-        // Zoom wheel listener removed to lock camera zoom in place
+        // Mouse wheel zoom listener: zoom in (deltaY < 0) up to 3.0, zoom out down to 1.0
+        window.addEventListener('wheel', (e) => {
+            const zoomSpeed = 0.1;
+            if (e.deltaY < 0) {
+                this.camera.zoom = Math.min(3.0, this.camera.zoom + zoomSpeed);
+            } else {
+                this.camera.zoom = Math.max(1.0, this.camera.zoom - zoomSpeed);
+            }
+            this.camera.updateProjectionMatrix();
+        }, { passive: true });
     }
 
     updateMouseCoords(e) {

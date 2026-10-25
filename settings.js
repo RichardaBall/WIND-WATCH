@@ -1,7 +1,7 @@
 // settings.js
 import * as THREE from 'three';
 
-export function setupSettings(dayNightCycle, player, weatherSystem) {
+export function setupSettings(dayNightCycle, player, weatherSystem, missionManager) {
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.top = '60px';
@@ -82,6 +82,22 @@ export function setupSettings(dayNightCycle, player, weatherSystem) {
         }
     };
     btnContainer.appendChild(weatherBtn);
+
+    // Skip Mission Button
+    const testMissionBtn = document.createElement('button');
+    testMissionBtn.innerText = 'Skip Mission';
+    testMissionBtn.style.padding = '6px 12px';
+    testMissionBtn.style.background = '#7c2d12';
+    testMissionBtn.style.color = '#ffffff';
+    testMissionBtn.style.border = '1px solid #f97316';
+    testMissionBtn.style.borderRadius = '4px';
+    testMissionBtn.style.cursor = 'pointer';
+    testMissionBtn.onclick = () => {
+        if (missionManager && typeof missionManager.completeActiveMission === 'function') {
+            missionManager.completeActiveMission();
+        }
+    };
+    btnContainer.appendChild(testMissionBtn);
 
     const controlsBtn = document.createElement('button');
     controlsBtn.innerText = 'Controls';

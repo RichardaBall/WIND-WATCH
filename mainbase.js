@@ -27,6 +27,48 @@ export class MainBase {
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
         this.group.add(this.mesh);
 
+        // --- Rescued Survivor Waving Setup ---
+        this.totalFrames = 43;
+        this.currentFrame = 0;
+        this.lastFrameTime = 0;
+        this.fadeTimer = 0;
+        this.hasFadedOut = false;
+
+        this.rescuedSurvivorMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.4,
+            transparent: true,
+            opacity: 1.0,
+            depthWrite: false,
+            side: THREE.DoubleSide
+        });
+
+        textureLoader.load('raft_survivor_1_waving.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1 / this.totalFrames, 1);
+            tex.offset.x = 0;
+
+            this.rescuedSurvivorMat.map = tex;
+            this.rescuedSurvivorMat.needsUpdate = true;
+            this.rescuedSurvivorTexture = tex;
+        }, undefined, (err) => {
+            console.error('Error loading raft_survivor_1_waving.png:', err);
+        });
+
+        const survivorGeo = new THREE.PlaneGeometry(3, 3);
+        this.rescuedSurvivorMesh = new THREE.Mesh(survivorGeo, this.rescuedSurvivorMat);
+        
+        this.rescuedSurvivorMesh.position.set(-5.20, 1.90, 3.10);
+        this.rescuedSurvivorMesh.scale.set(1.00, 1.00, 1.00);
+        this.survivorRotationZ = -0.30;
+
+        this.rescuedSurvivorMesh.visible = false; 
+        this.group.add(this.rescuedSurvivorMesh);
+
         // --- Hardcoded Square Foam Settings ---
         this.foamParams = {
             width: 13.0,
@@ -91,7 +133,6 @@ export class MainBase {
         this.foamParticleSystem.rotation.z = THREE.MathUtils.degToRad(this.foamParams.rotZ);
         this.group.add(this.foamParticleSystem);
 
-        // --- Final Saved Light Layout Configurations ---
         this.lightConfigs = {
             green: [
                 { x: -2.1, y: -1.4, scale: 0.05 },
@@ -136,7 +177,7 @@ export class MainBase {
         });
     }
 
-    update(nightFactor, cameraQuaternion, searchLightSystem = null) {
+    update(delta, nightFactor, cameraQuaternion, searchLightSystem = null, showRescuedSurvivor = false) {
         let baseColorFactor = 1 - nightFactor * 0.4;
         let baseBlueFactor = 1 - nightFactor * 0.3;
 
@@ -154,6 +195,58 @@ export class MainBase {
         }
 
         this.material.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);
+
+        if (this.rescuedSurvivorMesh) {
+            if (showRescuedSurvivor && !this.hasFadedOut) {
+                this.rescuedSurvivorMesh.visible = true;
+                
+                // Track time: Full visibility for 5 seconds, then fade out over 5 seconds
+                this.fadeTimer += delta;
+                if (this.fadeTimer <= 5.0) {
+                    this.rescuedSurvivorMat.opacity = 1.0;
+                } else {
+                    const fadeElapsed = this.fadeTimer - 5.0;
+                    const fadeProgress = Math.min(1.0, fadeElapsed / 5.0);
+                    this.rescuedSurvivorMat.opacity = 1.0 - fadeProgress;
+
+                    if (fadeElapsed >= 5.0) {
+                        this.rescuedSurvivorMesh.visible = false;
+                        this.hasFadedOut = true;
+                        console.log("🏁 Liferaft mission completed: Rescued survivor fully faded out.");
+                    }
+                }
+
+                const now = Date.now();
+                if (now - this.lastFrameTime >= 1000 / 30) {
+                    this.lastFrameTime = now;
+                    this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
+                    if (this.rescuedSurvivorTexture) {
+                        this.rescuedSurvivorTexture.offset.x = this.currentFrame * (1 / this.totalFrames);
+                    }
+                }
+
+                let survivorColorFactor = baseColorFactor;
+                if (searchLightSystem && searchLightSystem.state !== 'OFF') {
+                    const lightPos = searchLightSystem.lightPoolMesh.position;
+                    const basePos = this.group.position;
+                    const dx = basePos.x - lightPos.x;
+                    const dz = basePos.z - lightPos.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < 10.0) {
+                        survivorColorFactor = 1.0;
+                    }
+                }
+                this.rescuedSurvivorMat.color.setRGB(survivorColorFactor, survivorColorFactor, survivorColorFactor);
+
+                if (cameraQuaternion) {
+                    this.rescuedSurvivorMesh.quaternion.copy(cameraQuaternion);
+                    this.rescuedSurvivorMesh.rotateZ(this.survivorRotationZ);
+                }
+            } else if (!showRescuedSurvivor && !this.hasFadedOut) {
+                this.rescuedSurvivorMesh.visible = false;
+                this.fadeTimer = 0;
+            }
+        }
 
         if (this.foamMaterial) {
             const baseOp = this.foamParams.opacity;
@@ -215,7 +308,6 @@ export class MainBase {
             let x = tempVec.x;
             let y = tempVec.y;
 
-            // Pure wave oscillation in and out against the square shore
             const wave = Math.sin(elapsedTime * this.foamParams.waveSpeed * 3.0 + phase) * this.foamParams.waveAmplitude;
             const len = Math.sqrt(x * x + y * y);
             if (len > 0.001) {

@@ -12,6 +12,9 @@ export class WinchSystem {
         this.localAnchorY = -0.5;
         this.isDescendingForWinch = false;
 
+        this.liferaftMissionRef = null;
+        this.hasHookedSurvivor = false;
+
         // --- Rotor Wash Particle Mist Setup ---
         this.particlesCount = 3000;
         this.washGeometry = new THREE.BufferGeometry();
@@ -28,7 +31,6 @@ export class WinchSystem {
 
         this.washGeometry.setAttribute('position', new THREE.BufferAttribute(this.washPositions, 3));
 
-        // Soft feathered radial texture for mist/spray drops
         const canvas = document.createElement('canvas');
         canvas.width = 64;
         canvas.height = 64;
@@ -83,6 +85,37 @@ export class WinchSystem {
         this.hookMesh.rotation.x = Math.PI;
         this.hookMesh.visible = false;
         this.scene.add(this.hookMesh);
+
+        // Survivor cargo mesh attached to hook
+        const survivorGeo = new THREE.PlaneGeometry(3, 3);
+        const survivorMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.4,
+            transparent: true,
+            alphaTest: 0.5,
+            side: THREE.DoubleSide
+        });
+        
+        const textureLoader = new THREE.TextureLoader();
+        textureLoader.load('raft_survivor_1_waving.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(1 / 43, 1);
+            survivorMat.map = tex;
+            survivorMat.needsUpdate = true;
+        });
+
+        this.hookedSurvivorMesh = new THREE.Mesh(survivorGeo, survivorMat);
+        this.hookedSurvivorMesh.position.set(0, -0.8, 0);
+        this.hookedSurvivorMesh.visible = false;
+        this.hookMesh.add(this.hookedSurvivorMesh);
+    }
+
+    setLiferaftMission(mission) {
+        this.liferaftMissionRef = mission;
     }
 
     toggle() {
@@ -117,7 +150,6 @@ export class WinchSystem {
             if (this.playerRef && this.playerRef.audioManager) {
                 this.playerRef.audioManager.startWinch();
             }
-            // Immediately command helicopter to stop and lock in place while winch raises
             if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
                 this.playerRef.startRetraction();
             }
@@ -135,8 +167,7 @@ export class WinchSystem {
         return horizontalDist <= helipadRadius && heliPos.y > -2.0;
     }
 
-    update(delta) {
-        // Auto-retract if gear is deployed while winch is active
+    update(delta, cameraQuaternion) {
         if (this.playerRef && this.playerRef.gearDown && (this.isActive || this.currentExtension > 0.01 || this.isDescendingForWinch)) {
             this.isActive = false;
             this.isDescendingForWinch = false;
@@ -154,7 +185,6 @@ export class WinchSystem {
         const heliWorldPos = new THREE.Vector3();
         this.parentGroup.getWorldPosition(heliWorldPos);
 
-        // Check if helicopter has reached winch height (approx y = 12.0)
         if (this.isActive && this.isDescendingForWinch) {
             const atWinchHeight = Math.abs(heliWorldPos.y - 12.0) < 0.5;
             if (atWinchHeight) {
@@ -167,8 +197,14 @@ export class WinchSystem {
             }
         }
 
-        // If deactivated and cable is fully retracted, command heli to climb back up
-        if (!this.isActive && this.currentExtension < 0.01) {
+        if (!this.isActive && this.currentExtension < 0.05) {
+            if (this.hasHookedSurvivor) {
+                this.hasHookedSurvivor = false;
+                this.hookedSurvivorMesh.visible = false;
+                if (this.liferaftMissionRef) {
+                    this.liferaftMissionRef.setSurvivorRescued(true);
+                }
+            }
             if (this.playerRef && typeof this.playerRef.finishRetraction === 'function') {
                 this.playerRef.finishRetraction();
             }
@@ -214,7 +250,6 @@ export class WinchSystem {
             }
         }
 
-        // Spawn rotor wash particles whenever hovering low
         const overHelipad = this.isOverHelipad(heliWorldPos);
         const isLowHover = heliWorldPos.y <= 15.0;
 
@@ -274,9 +309,28 @@ export class WinchSystem {
             if (this.currentExtension > 0.99) {
                 this.hookWorldPos.y = Math.max(0.0, this.hookWorldPos.y);
             }
+
+            // Check collision with survivor when winch is fully extended near water
+            if (this.isActive && this.currentExtension > 0.95 && this.liferaftMissionRef && !this.hasHookedSurvivor && !this.liferaftMissionRef.isRescued) {
+                const survivorPos = this.liferaftMissionRef.getSurvivorWorldPosition();
+                const dist = this.hookWorldPos.distanceTo(survivorPos);
+                if (dist < 4.5) {
+                    this.hasHookedSurvivor = true;
+                    this.hookedSurvivorMesh.visible = true;
+                    if (this.liferaftMissionRef) {
+                        this.liferaftMissionRef.setSurvivorRescued(true);
+                    }
+                    console.log("🪝 Winch hook latched onto survivor! Retracting...");
+                    this.toggle();
+                }
+            }
         }
 
         this.hookMesh.position.copy(this.hookWorldPos);
+        if (cameraQuaternion) {
+            this.hookMesh.quaternion.copy(cameraQuaternion);
+            this.hookedSurvivorMesh.quaternion.copy(cameraQuaternion);
+        }
 
         const positions = this.cableLine.geometry.attributes.position.array;
         const midPoint = startWorldPos.clone().add(this.hookWorldPos).multiplyScalar(0.5);

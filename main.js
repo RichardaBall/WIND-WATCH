@@ -15,7 +15,6 @@ import { MissionManager } from './missionManager.js';
 import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
-import { LiferaftMission } from './liferaftMission.js';
 
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
@@ -32,14 +31,13 @@ const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManage
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
-const liferaftMission = new LiferaftMission(scene, player, navRadar, searchLightSystem);
 
 // Initialize modular managers
 const collisionManager = new CollisionManager(scene, player, windFarm);
-const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems);
+const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem);
 const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
-const settings = setupSettings(dayNightCycle, player, weatherSystem);
+const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 window.addEventListener('toggle-settings', (e) => {
@@ -68,14 +66,13 @@ function animate() {
     
     helicopterSystems.update(delta);
     collisionManager.update();
-    missionManager.update(delta, player.getPosition());
+    missionManager.update(delta, player.getPosition(), nightFactor);
     hudManager.update(helicopterSystems, searchLightSystem);
 
     const mouseWorldPos = inputManager.getMouseWorldPosition();
 
     searchLightSystem.update(delta, nightFactor, mouseWorldPos);
     navRadar.update();
-    liferaftMission.update(delta, camera.quaternion, nightFactor, searchLightSystem);
 
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);
@@ -91,7 +88,27 @@ function animate() {
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
 
-    mainBase.update(nightFactor, camera.quaternion, searchLightSystem);
+    // Check if survivor has been picked up/rescued AND helicopter is landed near base
+    const padCenter = new THREE.Vector2(0, 0);
+    const pos2D = new THREE.Vector2(playerPos.x, playerPos.z);
+    const distanceFromBase = pos2D.distanceTo(padCenter);
+
+    const isLandedAtBase = distanceFromBase < 20.0 && player.gearDown === true && playerPos.y <= 7.0;
+    
+    const activeRaft = missionManager.liferaftMission;
+    const isSurvivorRescued = activeRaft && (activeRaft.isRescued || helicopterSystems.tools['WINCH'].hasHookedSurvivor);
+
+    const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
+
+    // Fade out raft alongside the base survivor display
+    if (showRescuedSurvivor && activeRaft) {
+        activeRaft.fadeRaft(delta);
+        if (mainBase.hasFadedOut) {
+            activeRaft.isFullyCompleted = true;
+        }
+    }
+
+    mainBase.update(delta, nightFactor, camera.quaternion, searchLightSystem, showRescuedSurvivor);
     windFarm.update(delta, camera.quaternion);
     
     player.mesh.quaternion.copy(camera.quaternion);

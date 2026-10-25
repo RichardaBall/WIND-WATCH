@@ -1,33 +1,32 @@
 import * as THREE from 'three';
+import { LiferaftMission } from './liferaftMission.js';
 
 export class MissionManager {
-    constructor(scene, navRadar, windFarm, helicopterSystems) {
+    constructor(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem) {
         this.scene = scene;
         this.navRadar = navRadar;
         this.windFarm = windFarm;
         this.helicopterSystems = helicopterSystems;
+        this.player = player;
+        this.camera = camera;
+        this.searchLightSystem = searchLightSystem;
 
-        this.missionState = 'READY'; // READY, ACTIVE, COMPLETED
-        this.currentMissionType = null;
+        this.missionState = 'READY'; // READY, ACTIVE
+        this.currentMissionType = null; // 'WTG_FIRE' or 'LIFERAFT'
         this.currentTurbineIndex = 0;
-        this.extinguishProgress = 0; // Tracks sustained water contact time
+        this.extinguishProgress = 0;
+        this.liferaftMission = null;
 
         this.registerPermanentLandmarks();
         
         setTimeout(() => {
-            this.spawnNextMission();
+            this.spawnRandomMission();
         }, 100);
     }
 
     registerPermanentLandmarks() {
-        // Main Base (Blue) - Always points to Base
+        // Base is always blue
         this.navRadar.addOrUpdateMarker('main_base', new THREE.Vector3(0, 0, 0), '#3498db', 'BASE');
-        
-        // Wind Farm Center Point (Green)
-        if (this.windFarm && this.windFarm.turbines.length > 0) {
-            const centerPos = this.getWindFarmCenter();
-            this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#2ecc71', 'WIND');
-        }
     }
 
     getWindFarmCenter() {
@@ -39,33 +38,69 @@ export class MissionManager {
             center.add(pos);
         });
         center.divideScalar(this.windFarm.turbines.length);
-        center.y += 20; // Hub height
+        center.y += 20; 
         return center;
     }
 
-    spawnNextMission() {
-        const missionTypes = ['WTG_FIRE'];
+    clearAllMissions() {
+        // 1. Clear all wind farm fires and remove wind farm radar marker
+        if (this.windFarm && this.windFarm.turbines) {
+            for (let i = 0; i < this.windFarm.turbines.length; i++) {
+                this.windFarm.setTurbineFire(i, false);
+            }
+        }
+        this.navRadar.removeMarker('wind_farm');
+
+        // 2. Remove liferaft mission if active
+        if (this.liferaftMission) {
+            if (this.liferaftMission.group) {
+                this.scene.remove(this.liferaftMission.group);
+            }
+            this.navRadar.removeMarker('liferaft');
+            this.liferaftMission = null;
+        }
+        if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
+            this.helicopterSystems.tools['WINCH'].setLiferaftMission(null);
+        }
+    }
+
+    spawnRandomMission() {
+        this.clearAllMissions();
+
+        const missionTypes = ['WTG_FIRE', 'LIFERAFT'];
         const chosenType = missionTypes[Math.floor(Math.random() * missionTypes.length)];
 
         this.currentMissionType = chosenType;
         this.missionState = 'ACTIVE';
         this.extinguishProgress = 0;
 
-        if (chosenType === 'WTG_FIRE' && this.windFarm && this.windFarm.turbines.length > 0) {
-            this.currentTurbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
-            this.windFarm.setTurbineFire(this.currentTurbineIndex, true);
-            
-            // Turn the wind farm pointer RED during an active fire mission
-            const centerPos = this.getWindFarmCenter();
-            this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#e74c3c', 'FIRE!');
-            console.log(`🔥 New WTG Fire Mission Spawned on turbine index ${this.currentTurbineIndex}!`);
+        const centerPos = this.getWindFarmCenter();
+
+        if (chosenType === 'WTG_FIRE') {
+            if (this.windFarm && this.windFarm.turbines.length > 0) {
+                this.currentTurbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
+                this.windFarm.setTurbineFire(this.currentTurbineIndex, true);
+                
+                // Active WTG Fire mission has a red radar marker (`#e74c3c`)
+                this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#e74c3c', 'FIRE!');
+                console.log(`🔥 Active Mission Spawned: WTG Fire on turbine index ${this.currentTurbineIndex}!`);
+            }
+        } else if (chosenType === 'LIFERAFT') {
+            this.liferaftMission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem);
+            this.helicopterSystems.tools['WINCH'].setLiferaftMission(this.liferaftMission);
+            console.log("🛟 Active Mission Spawned: Liferaft Rescue at Sea!");
         }
     }
 
-    update(delta, playerPosition) {
+    completeActiveMission() {
+        console.log("🧪 Test Trigger: Forcibly completing current mission and spawning next...");
+        this.spawnRandomMission();
+    }
+
+    update(delta, playerPosition, nightFactor) {
         if (!this.windFarm || !this.helicopterSystems) return;
 
-        // Universal Main Base Restocking Logic
+        // Universal Main Base Restocking Logic (keeps fuel/water topped up when landed at base)
         const distToBase = playerPosition.distanceTo(new THREE.Vector3(0, 0, 0));
         const player = this.helicopterSystems.playerRef;
         const isNearBase = distToBase < 25.0;
@@ -98,45 +133,37 @@ export class MissionManager {
             this.helicopterSystems.water = Math.min(this.helicopterSystems.maxWater, this.helicopterSystems.water + delta * waterRate);
         }
 
-        // Handle Active Mission Logic
+        // Handle Active Mission Updates
         if (this.missionState === 'ACTIVE') {
             if (this.currentMissionType === 'WTG_FIRE') {
                 const isOnFire = this.windFarm.isTurbineOnFire(this.currentTurbineIndex);
                 if (!isOnFire) {
                     this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
+                    this.navRadar.removeMarker('wind_farm');
                     
-                    // Turn the wind farm pointer back to GREEN once extinguished
-                    const centerPos = this.getWindFarmCenter();
-                    this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#2ecc71', 'WIND');
-                    
-                    console.log('🎉 WTG Fire Extinguished! Return to Main Base to restock & spawn next mission.');
-                    this.missionState = 'COMPLETED';
+                    console.log('🎉 WTG Fire Extinguished! Spawning next random mission immediately...');
+                    this.spawnRandomMission();
                 } else {
                     const turbinePos = this.windFarm.getTurbineWorldPosition(this.currentTurbineIndex);
                     const dist = playerPosition.distanceTo(turbinePos);
                     const isSprayingWater = this.helicopterSystems.isWaterActive();
 
-                    // Smaller hitbox (15.0 units instead of 35.0) and requires ~3 seconds of continuous accurate water spray
                     if (dist < 15.0 && isSprayingWater) {
                         this.extinguishProgress += delta;
                         if (this.extinguishProgress >= 3.0) {
                             this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
                         }
                     } else {
-                        // Gradually reset progress if spray drifts off target
                         this.extinguishProgress = Math.max(0, this.extinguishProgress - delta * 1.5);
                     }
                 }
-            }
-        }
+            } else if (this.currentMissionType === 'LIFERAFT' && this.liferaftMission) {
+                this.liferaftMission.update(delta, this.camera.quaternion, nightFactor, this.searchLightSystem);
 
-        // Handle Next Mission Spawn after restocking
-        else if (this.missionState === 'COMPLETED') {
-            if (isNearBase && isLanded && engineOff) {
-                if (this.helicopterSystems.fuel >= this.helicopterSystems.maxFuel && 
-                    this.helicopterSystems.water >= this.helicopterSystems.maxWater) {
-                    console.log('✅ Restocking Complete! Spawning next mission...');
-                    this.spawnNextMission();
+                // Instantly spawn next random mission as soon as the liferaft/survivor sequence finishes fading out at main base
+                if (this.liferaftMission.isFullyCompleted) {
+                    console.log('🎉 Liferaft Mission Fully Completed! Spawning next random mission immediately...');
+                    this.spawnRandomMission();
                 }
             }
         }
