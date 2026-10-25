@@ -287,7 +287,8 @@ export class WinchSystem {
         const startWorldPos = heliWorldPos.clone().add(new THREE.Vector3(0, this.localAnchorY, 0));
         const heliWorldY = heliWorldPos.y;
         
-        const distanceToSeaLevel = Math.max(0, heliWorldY - 0.0);
+        // FIX 1: Account for the helicopter's altitude so the cable fully reaches sea level (y = 0.0) when fully extended
+        const distanceToSeaLevel = Math.max(0, heliWorldY - this.localAnchorY);
         const targetCableLength = distanceToSeaLevel * this.currentExtension;
 
         const targetHookWorldY = heliWorldY + this.localAnchorY - targetCableLength;
@@ -312,11 +313,11 @@ export class WinchSystem {
                 this.hookWorldPos.y = Math.max(0.0, this.hookWorldPos.y);
             }
 
-            // Check collision with survivor when winch is fully extended near water
+            // FIX 2: Tightened the collision distance threshold from 4.5 to 1.8 so the hook must physically get close to the survivor
             if (this.isActive && this.currentExtension > 0.95 && this.liferaftMissionRef && !this.hasHookedSurvivor && !this.liferaftMissionRef.isRescued) {
                 const survivorPos = this.liferaftMissionRef.getSurvivorWorldPosition();
                 const dist = this.hookWorldPos.distanceTo(survivorPos);
-                if (dist < 4.5) {
+                if (dist < 1.8) {
                     this.hasHookedSurvivor = true;
                     this.hookedSurvivorMesh.visible = true;
                     if (this.liferaftMissionRef) {

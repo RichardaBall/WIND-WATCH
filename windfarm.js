@@ -378,7 +378,8 @@ export class WindFarm {
                 turbine.foamGeometry.attributes.position.needsUpdate = true;
             }
 
-            if (turbine.isSparking && (!camPos || distSq < 1000 * 1000)) {
+            // Optimized distance check for spark particles (600x600 instead of 1000x1000)
+            if (turbine.isSparking && (!camPos || distSq < 600 * 600)) {
                 turbine.sparkLight.intensity = Math.random() > 0.3 ? 6.0 : 0.5;
 
                 const sparkPos = turbine.sparkSystem.geometry.attributes.position.array;

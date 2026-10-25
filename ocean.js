@@ -3,7 +3,7 @@ import { Water } from 'three/addons/objects/Water.js';
 
 export class OceanWater {
     constructor(scene, sunLight) {
-        const waterGeometry = new THREE.PlaneGeometry(5000, 5000, 64, 64);
+        const waterGeometry = new THREE.PlaneGeometry(5000, 5000, 32, 32);
         const waterNormals = new THREE.TextureLoader().load(
             'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg',
             (texture) => {
@@ -12,10 +12,10 @@ export class OceanWater {
             }
         );
 
-        // Pristine original day water configuration
+        // Pristine original day water configuration with optimized texture resolution
         this.water = new Water(waterGeometry, {
-            textureWidth: 512,
-            textureHeight: 512,
+            textureWidth: 256,
+            textureHeight: 256,
             waterNormals: waterNormals,
             sunDirection: sunLight.position.clone().normalize(),
             sunColor: 0x336699,

@@ -1,4 +1,3 @@
-// hudManager.js
 import * as THREE from 'three';
 
 export class HudManager {
@@ -6,6 +5,7 @@ export class HudManager {
         this.player = player;
         this.helicopterSystems = helicopterSystems;
         this.searchLightSystem = searchLightSystem;
+        this._lastHudUpdate = 0;
 
         this.createResourceHud();
     }
@@ -119,6 +119,10 @@ export class HudManager {
     }
 
     update() {
+        const now = performance.now();
+        if (now - this._lastHudUpdate < 100) return;
+        this._lastHudUpdate = now;
+
         if (!this.helicopterSystems) return;
 
         // 1. Update Resource Bars
