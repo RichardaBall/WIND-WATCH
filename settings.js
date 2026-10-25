@@ -1,7 +1,7 @@
 // settings.js
 import * as THREE from 'three';
 
-export function setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems) {
+export function setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem) {
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.top = '60px';
@@ -60,6 +60,25 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
     heliVisBtn.style.borderRadius = '4px';
     heliVisBtn.style.cursor = 'pointer';
     btnContainer.appendChild(heliVisBtn);
+
+    let cloudsVisible = true;
+    const cloudVisBtn = document.createElement('button');
+    cloudVisBtn.innerText = 'Clouds: ON';
+    cloudVisBtn.style.padding = '6px 12px';
+    cloudVisBtn.style.background = '#1a365d';
+    cloudVisBtn.style.color = '#ffffff';
+    cloudVisBtn.style.border = '1px solid #4a90e2';
+    cloudVisBtn.style.borderRadius = '4px';
+    cloudVisBtn.style.cursor = 'pointer';
+    cloudVisBtn.onclick = () => {
+        cloudsVisible = !cloudsVisible;
+        if (cloudSystem && cloudSystem.cloudGroup) {
+            cloudSystem.cloudGroup.visible = cloudsVisible;
+        }
+        cloudVisBtn.innerText = `Clouds: ${cloudsVisible ? 'ON' : 'OFF'}`;
+        cloudVisBtn.style.background = cloudsVisible ? '#1a365d' : '#2b6cb0';
+    };
+    btnContainer.appendChild(cloudVisBtn);
 
     // Weather Override Button (Cycles through all 6 weather states)
     const weatherBtn = document.createElement('button');

@@ -15,6 +15,7 @@ import { MissionManager } from './missionManager.js';
 import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
+import { CloudSystem } from './cloudSystem.js';
 
 // Initialize Game Systems immediately in the background
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
@@ -23,6 +24,7 @@ const ocean = new OceanWater(scene, sunLight);
 const mainBase = new MainBase(scene, camera, renderer);
 const windFarm = new WindFarm(scene, camera);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
+const cloudSystem = new CloudSystem(scene);
 
 const player = new HelicopterPlayer(scene);
 const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
@@ -35,7 +37,7 @@ const collisionManager = new CollisionManager(scene, player, windFarm);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem);
 const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
-const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems);
+const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 window.addEventListener('toggle-settings', (e) => {
@@ -57,8 +59,11 @@ function animate() {
 
     const nightFactor = dayNightCycle.update(delta);
     weatherSystem.update(delta);
-
+    
     const windForce = weatherSystem.getWindForce();
+    const activeWeather = weatherSystem.targetWeather;
+    cloudSystem.update(delta, nightFactor, camera.quaternion, windForce, activeWeather);
+
     player.update(delta, nightFactor, windForce);
     
     helicopterSystems.update(delta);

@@ -1,3 +1,4 @@
+// sceneSetup.js
 import * as THREE from 'three';
 
 export function setupScene() {
@@ -24,13 +25,13 @@ export function setupScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.25; // Increased exposure to brighten overall midtones[cite: 10]
     document.body.appendChild(renderer.domElement);
 
-    const ambientLight = new THREE.AmbientLight(0x6080a0, 0.8);
+    const ambientLight = new THREE.AmbientLight(0x88aacc, 1.2); // Brighter and warmer ambient fill[cite: 10]
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 2.0); // Stronger primary sun light[cite: 10]
     sunLight.position.set(100, 200, 100);
     scene.add(sunLight);
 
