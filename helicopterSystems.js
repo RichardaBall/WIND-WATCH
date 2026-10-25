@@ -19,14 +19,22 @@ export class HelicopterSystems {
         // Resource tracking
         this.maxFuel = 100;
         this.fuel = 100;
+        this.unlimitedFuel = false; // Added for testing
         this.maxWater = 100;
         this.water = 100;
 
         this.lowFuelTriggered = false;
     }
 
+    setUnlimitedFuel(enabled) {
+        this.unlimitedFuel = enabled;
+        if (this.unlimitedFuel) {
+            this.fuel = this.maxFuel;
+        }
+        console.log(`⛽ Unlimited Fuel: ${this.unlimitedFuel ? 'ON' : 'OFF'}`);
+    }
+
     setTool(toolKey) {
-        // Prevent switching tools if either water spray or winch is currently active/deployed
         const waterActive = this.tools['WATER'] && this.tools['WATER'].isActive;
         const winchActive = this.playerRef && this.playerRef.winchState !== 'STOWED';
 
@@ -86,22 +94,26 @@ export class HelicopterSystems {
         // Deplete fuel only when the engine state is RUNNING
         const engineRunning = this.playerRef && this.playerRef.engineState === 'RUNNING';
         if (engineRunning) {
-            const gearIsDown = this.playerRef && this.playerRef.gearDown;
-            const fuelBurnRate = gearIsDown ? 1.2 : 1.0;
-            this.fuel = Math.max(0, this.fuel - delta * fuelBurnRate);
+            if (this.unlimitedFuel) {
+                this.fuel = this.maxFuel;
+            } else {
+                const gearIsDown = this.playerRef && this.playerRef.gearDown;
+                const fuelBurnRate = gearIsDown ? 1.2 : 1.0;
+                this.fuel = Math.max(0, this.fuel - delta * fuelBurnRate);
 
-            if (this.fuel <= 20 && !this.lowFuelTriggered) {
-                this.lowFuelTriggered = true;
-                if (this.playerRef && this.playerRef.audioManager) {
-                    this.playerRef.audioManager.playLowFuel();
-                    console.log("Low fuel warning triggered!");
+                if (this.fuel <= 20 && !this.lowFuelTriggered) {
+                    this.lowFuelTriggered = true;
+                    if (this.playerRef && this.playerRef.audioManager) {
+                        this.playerRef.audioManager.playLowFuel();
+                        console.log("Low fuel warning triggered!");
+                    }
                 }
-            }
 
-            if (this.fuel <= 0) {
-                if (this.playerRef && typeof this.playerRef.shutdownEngine === 'function') {
-                    this.playerRef.shutdownEngine();
-                    console.log("Fuel depleted! Initiating engine shutdown...");
+                if (this.fuel <= 0) {
+                    if (this.playerRef && typeof this.playerRef.shutdownEngine === 'function') {
+                        this.playerRef.shutdownEngine();
+                        console.log("Fuel depleted! Initiating engine shutdown...");
+                    }
                 }
             }
         }

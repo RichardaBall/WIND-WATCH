@@ -16,6 +16,7 @@ import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
 
+// Initialize Game Systems immediately in the background
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
 const ocean = new OceanWater(scene, sunLight);
@@ -24,20 +25,17 @@ const windFarm = new WindFarm(scene, camera);
 const dayNightCycle = new DayNightCycle(scene, sunLight, ambientLight, ocean);
 
 const player = new HelicopterPlayer(scene);
-
-// Pass player.audioManager into WeatherSystem so it has access to the audio context
 const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
 
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
 
-// Initialize modular managers
 const collisionManager = new CollisionManager(scene, player, windFarm);
 const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem);
 const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
-const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager);
+const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 window.addEventListener('toggle-settings', (e) => {
@@ -51,7 +49,6 @@ const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
-    // Cap delta to prevent physics/particle explosions when switching browser tabs
     const delta = Math.min(clock.getDelta(), 0.1);
 
     if (inputManager.isDragging()) {
@@ -88,7 +85,6 @@ function animate() {
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
 
-    // Check if survivor has been picked up/rescued AND helicopter is landed near base
     const padCenter = new THREE.Vector2(0, 0);
     const pos2D = new THREE.Vector2(playerPos.x, playerPos.z);
     const distanceFromBase = pos2D.distanceTo(padCenter);
@@ -100,7 +96,6 @@ function animate() {
 
     const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
 
-    // Fade out raft alongside the base survivor display
     if (showRescuedSurvivor && activeRaft) {
         activeRaft.fadeRaft(delta);
         if (mainBase.hasFadedOut) {
@@ -116,4 +111,36 @@ function animate() {
     renderer.render(scene, camera);
 }
 
+// Start render loop immediately in background
 animate();
+
+// Handle smooth loading screen progress and fade-out when START is clicked
+window.addEventListener('start-loading-game', () => {
+    const progressBar = document.getElementById('loading-progress');
+    const loadingStatus = document.getElementById('loading-status');
+    const loadingScreen = document.getElementById('loading-screen');
+    const copyrightNotice = document.getElementById('copyright-notice');
+
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += 20;
+        if (progress > 100) progress = 100;
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (loadingStatus) loadingStatus.innerText = `Loading assets (${progress}%)...`;
+
+        if (progress >= 100) {
+            clearInterval(interval);
+            if (loadingStatus) loadingStatus.innerText = 'Ready! Launching flight...';
+            setTimeout(() => {
+                if (loadingScreen) {
+                    loadingScreen.style.opacity = '0';
+                    if (copyrightNotice) copyrightNotice.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                        if (copyrightNotice) copyrightNotice.style.display = 'none';
+                    }, 600);
+                }
+            }, 300);
+        }
+    }, 100);
+});

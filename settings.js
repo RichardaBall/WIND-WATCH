@@ -1,7 +1,7 @@
 // settings.js
 import * as THREE from 'three';
 
-export function setupSettings(dayNightCycle, player, weatherSystem, missionManager) {
+export function setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems) {
     const container = document.createElement('div');
     container.style.position = 'absolute';
     container.style.top = '60px';
@@ -98,6 +98,26 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
         }
     };
     btnContainer.appendChild(testMissionBtn);
+
+    // Unlimited Fuel Button
+    const fuelBtn = document.createElement('button');
+    fuelBtn.innerText = 'Unlimited Fuel: OFF';
+    fuelBtn.style.padding = '6px 12px';
+    fuelBtn.style.background = '#1a365d';
+    fuelBtn.style.color = '#ffffff';
+    fuelBtn.style.border = '1px solid #4a90e2';
+    fuelBtn.style.borderRadius = '4px';
+    fuelBtn.style.cursor = 'pointer';
+    let unlimitedFuelActive = false;
+    fuelBtn.onclick = () => {
+        unlimitedFuelActive = !unlimitedFuelActive;
+        if (helicopterSystems && typeof helicopterSystems.setUnlimitedFuel === 'function') {
+            helicopterSystems.setUnlimitedFuel(unlimitedFuelActive);
+        }
+        fuelBtn.innerText = `Unlimited Fuel: ${unlimitedFuelActive ? 'ON' : 'OFF'}`;
+        fuelBtn.style.background = unlimitedFuelActive ? '#2b6cb0' : '#1a365d';
+    };
+    btnContainer.appendChild(fuelBtn);
 
     const controlsBtn = document.createElement('button');
     controlsBtn.innerText = 'Controls';

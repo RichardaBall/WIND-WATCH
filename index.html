@@ -140,8 +140,7 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            z-index: 99999;
-            transition: opacity 0.6s ease-out;
+            z-index: 99998; /* Sits right under start-screen */
             color: #ffffff;
             font-family: monospace;
         }
@@ -152,7 +151,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 15, 0.4);
+            background: rgba(0, 0, 15, 0.5);
             z-index: 1;
         }
         #loading-screen > * {
@@ -181,7 +180,7 @@
             width: 0%;
             height: 100%;
             background: linear-gradient(90deg, #9ca3af, #ffffff);
-            transition: width 0.2s ease-out;
+            transition: width 0.1s ease-out;
             box-shadow: 0 0 10px #ffffff;
         }
         #loading-status {
@@ -230,7 +229,7 @@
         <div class="progress-bar-container">
             <div id="loading-progress"></div>
         </div>
-        <div id="loading-status">Initializing systems...</div>
+        <div id="loading-status">Loading assets (0%)...</div>
     </div>
 
     <!-- Copyright Notice -->
@@ -271,35 +270,33 @@
             }
         });
 
-        // Toggle Settings Button Active State & Dispatch Event for main.js
         const settingsBtn = document.getElementById('settings-btn');
         settingsBtn.addEventListener('click', () => {
             settingsBtn.classList.toggle('active');
-            // Dispatch a custom event so your main.js can listen and open/close the settings menu
             const event = new CustomEvent('toggle-settings', { detail: { active: settingsBtn.classList.contains('active') } });
             window.dispatchEvent(event);
         });
 
-        // Handle Start Button Transition & Hide Copyright Notice
         const loadGameBtn = document.getElementById('load-game-btn');
         const startScreen = document.getElementById('start-screen');
+        const loadingScreen = document.getElementById('loading-screen');
         const copyrightNotice = document.getElementById('copyright-notice');
 
         if (loadGameBtn) {
             loadGameBtn.addEventListener('click', () => {
-                // Request fullscreen
                 if (!document.fullscreenElement) {
                     document.documentElement.requestFullscreen().catch(err => {
                         console.warn(`Error attempting to enable fullscreen on start: ${err.message}`);
                     });
                 }
 
-                // Fade out start screen and copyright notice immediately
+                // Show loading screen immediately underneath before fading out start screen
+                loadingScreen.style.display = 'flex';
                 startScreen.style.opacity = '0';
-                copyrightNotice.style.opacity = '0';
+                
                 setTimeout(() => {
                     startScreen.style.display = 'none';
-                    copyrightNotice.style.display = 'none';
+                    window.dispatchEvent(new CustomEvent('start-loading-game'));
                 }, 600);
             });
         }
