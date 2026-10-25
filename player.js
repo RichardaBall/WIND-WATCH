@@ -1,3 +1,4 @@
+// player.js
 import * as THREE from 'three';
 import { AudioManager } from './audioManager.js';
 import { crash } from './crash.js';

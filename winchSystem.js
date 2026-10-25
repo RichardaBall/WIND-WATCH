@@ -1,3 +1,4 @@
+// winchSystem.js
 import * as THREE from 'three';
 
 export class WinchSystem {
@@ -197,7 +198,15 @@ export class WinchSystem {
             }
         }
 
-        if (!this.isActive && this.currentExtension < 0.05) {
+        const speed = 1.5;
+        const prevExtension = this.currentExtension;
+        
+        if (!this.isDescendingForWinch) {
+            this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
+        }
+
+        // Trigger finishRetraction as soon as the cable is fully retracted and no longer visible
+        if (!this.isActive && this.currentExtension < 0.01) {
             if (this.hasHookedSurvivor) {
                 this.hasHookedSurvivor = false;
                 this.hookedSurvivorMesh.visible = false;
@@ -208,13 +217,6 @@ export class WinchSystem {
             if (this.playerRef && typeof this.playerRef.finishRetraction === 'function') {
                 this.playerRef.finishRetraction();
             }
-        }
-
-        const speed = 1.5;
-        const prevExtension = this.currentExtension;
-        
-        if (!this.isDescendingForWinch) {
-            this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
         }
 
         if (Math.abs(this.currentExtension - prevExtension) < 0.0005) {

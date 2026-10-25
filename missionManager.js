@@ -13,6 +13,7 @@ export class MissionManager {
 
         this.missionState = 'READY'; // READY, ACTIVE
         this.currentMissionType = null; // 'WTG_FIRE' or 'LIFERAFT'
+        this.lastMissionType = null;    // Tracks the most recently completed mission
         this.currentTurbineIndex = 0;
         this.extinguishProgress = 0;
         this.liferaftMission = null;
@@ -68,7 +69,14 @@ export class MissionManager {
         this.clearAllMissions();
 
         const missionTypes = ['WTG_FIRE', 'LIFERAFT'];
-        const chosenType = missionTypes[Math.floor(Math.random() * missionTypes.length)];
+        
+        // Filter out the last completed mission to prevent it appearing twice in a row
+        let availableTypes = missionTypes;
+        if (this.lastMissionType && missionTypes.length > 1) {
+            availableTypes = missionTypes.filter(type => type !== this.lastMissionType);
+        }
+
+        const chosenType = availableTypes[Math.floor(Math.random() * availableTypes.length)];
 
         this.currentMissionType = chosenType;
         this.missionState = 'ACTIVE';
@@ -94,6 +102,9 @@ export class MissionManager {
 
     completeActiveMission() {
         console.log("🧪 Test Trigger: Forcibly completing current mission and spawning next...");
+        if (this.currentMissionType) {
+            this.lastMissionType = this.currentMissionType;
+        }
         this.spawnRandomMission();
     }
 
@@ -141,6 +152,7 @@ export class MissionManager {
                     this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
                     this.navRadar.removeMarker('wind_farm');
                     
+                    this.lastMissionType = this.currentMissionType;
                     console.log('🎉 WTG Fire Extinguished! Spawning next random mission immediately...');
                     this.spawnRandomMission();
                 } else {
@@ -148,9 +160,9 @@ export class MissionManager {
                     const dist = playerPosition.distanceTo(turbinePos);
                     const isSprayingWater = this.helicopterSystems.isWaterActive();
 
-                    if (dist < 15.0 && isSprayingWater) {
+                    if (dist < 35.0 && isSprayingWater) {
                         this.extinguishProgress += delta;
-                        if (this.extinguishProgress >= 3.0) {
+                        if (this.extinguishProgress >= 2.0) {
                             this.windFarm.setTurbineFire(this.currentTurbineIndex, false);
                         }
                     } else {
@@ -162,6 +174,7 @@ export class MissionManager {
 
                 // Instantly spawn next random mission as soon as the liferaft/survivor sequence finishes fading out at main base
                 if (this.liferaftMission.isFullyCompleted) {
+                    this.lastMissionType = this.currentMissionType;
                     console.log('🎉 Liferaft Mission Fully Completed! Spawning next random mission immediately...');
                     this.spawnRandomMission();
                 }
