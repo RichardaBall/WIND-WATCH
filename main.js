@@ -67,6 +67,7 @@ socket.on('remote-player-update', (data) => {
     if (remotePlayers[data.id]) {
         const rp = remotePlayers[data.id];
         rp.targetPos.set(data.x, data.y, data.z);
+        rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
         rp.targetFrame = data.currentFrame;
         rp.rotorSpeed = data.rotorSpeed;
         rp.gearDown = data.gearDown;
@@ -86,6 +87,7 @@ function spawnRemotePlayer(id, data) {
         group: remoteHeli.group,
         helicopter: remoteHeli,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
+        targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
         rotorSpeed: data.rotorSpeed || 0,
         gearDown: data.gearDown ?? true
@@ -119,7 +121,7 @@ function animate() {
 
     player.update(delta, nightFactor, windForce);
     
-    // Send local player position, animation frame, and rotor speed to server
+    // Send local player position, rotation, animation frame, and rotor speed to server
     networkTimer += delta;
     if (networkTimer >= 0.05) {
         networkTimer = 0;
@@ -130,14 +132,19 @@ function animate() {
             z: pos.z,
             currentFrame: player.currentFrame,
             rotorSpeed: player.rotorSpeed,
-            gearDown: player.gearDown
+            gearDown: player.gearDown,
+            qx: player.mesh.quaternion.x,
+            qy: player.mesh.quaternion.y,
+            qz: player.mesh.quaternion.z,
+            qw: player.mesh.quaternion.w
         });
     }
 
-    // Smoothly update remote players' positions and animate their rotors/sprites
+    // Smoothly update remote players' positions, rotations, and animate rotors
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
+        rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
 
         // Animate remote rotors
         if (rp.helicopter && rp.helicopter.rotorBlades) {

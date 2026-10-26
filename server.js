@@ -16,7 +16,8 @@ io.on('connection', (socket) => {
         x: 0, y: 6, z: 0,
         currentFrame: 5,
         rotorSpeed: 0,
-        gearDown: true
+        gearDown: true,
+        qx: 0, qy: 0, qz: 0, qw: 1
     };
 
     socket.emit('current-players', activePlayers);
@@ -30,6 +31,10 @@ io.on('connection', (socket) => {
             activePlayers[socket.id].currentFrame = data.currentFrame;
             activePlayers[socket.id].rotorSpeed = data.rotorSpeed;
             activePlayers[socket.id].gearDown = data.gearDown;
+            activePlayers[socket.id].qx = data.qx;
+            activePlayers[socket.id].qy = data.qy;
+            activePlayers[socket.id].qz = data.qz;
+            activePlayers[socket.id].qw = data.qw;
         }
         socket.broadcast.emit('remote-player-update', {
             id: socket.id,
