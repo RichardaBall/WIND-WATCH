@@ -63,6 +63,12 @@ socket.on('player-joined', (playerData) => {
     spawnRemotePlayer(playerData.id, playerData);
 });
 
+socket.on('sync-world', (worldData) => {
+    if (weatherSystem && typeof weatherSystem.setWeather === 'function') {
+        weatherSystem.setWeather(worldData.weather);
+    }
+});
+
 socket.on('remote-player-update', (data) => {
     if (remotePlayers[data.id]) {
         const rp = remotePlayers[data.id];
@@ -73,6 +79,7 @@ socket.on('remote-player-update', (data) => {
         rp.gearDown = data.gearDown;
         rp.winchState = data.winchState;
         rp.isDroppingWater = data.isDroppingWater;
+        rp.searchLightState = data.searchLightState;
 
         if (rp.helicopter) {
             rp.helicopter.gearDown = data.gearDown;
@@ -86,53 +93,76 @@ socket.on('remote-player-update', (data) => {
 socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
-        if (remotePlayers[id].winchLine) {
-            scene.remove(remotePlayers[id].winchLine);
-        }
+        if (remotePlayers[id].winchLine) scene.remove(remotePlayers[id].winchLine);
+        if (remotePlayers[id].waterStream) scene.remove(remotePlayers[id].waterStream);
+        if (remotePlayers[id].searchLight) scene.remove(remotePlayers[id].searchLight);
         delete remotePlayers[id];
     }
 });
 
 socket.on('sync-mission', (missionData) => {
-    if (missionManager && missionManager.liferaftMission) {
-        if (typeof missionManager.liferaftMission.setPosition === 'function') {
-            missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
-        } else if (missionManager.liferaftMission.mesh) {
-            missionManager.liferaftMission.mesh.position.set(missionData.x, 0, missionData.z);
+    if (missionManager) {
+        if (missionData.type === 'LIFERAFT') {
+            if (missionManager.currentMissionKey !== 'LIFERAFT') {
+                missionManager.spawnSpecificMission('LIFERAFT', missionData);
+            } else if (missionManager.currentMissionInstance && typeof missionManager.currentMissionInstance.setPosition === 'function') {
+                missionManager.currentMissionInstance.setPosition(missionData.x, missionData.z);
+            }
+        } else if (missionData.type === 'WTG_FIRE') {
+            if (missionManager.currentMissionKey !== 'WTG_FIRE') {
+                missionManager.spawnSpecificMission('WTG_FIRE', missionData);
+            }
         }
     }
 });
 
 socket.on('mission-completed', () => {
-    if (missionManager && missionManager.liferaftMission) {
-        missionManager.liferaftMission.isFullyCompleted = true;
+    if (missionManager && missionManager.currentMissionInstance) {
+        missionManager.currentMissionInstance.isFullyCompleted = true;
     }
 });
 
 function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
     
-    // Create a visual winch line for remote player
-    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, 0, 0),
-        new THREE.Vector3(0, -20, 0)
-    ]);
-    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa, linewidth: 2 });
-    const winchLine = new THREE.Line(lineGeometry, lineMaterial);
+    // Winch line for remote player
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 3 });
+    const winchLine = new THREE.Line(lineGeo, lineMat);
     winchLine.visible = false;
     scene.add(winchLine);
+
+    // Water spray stream particles for remote player
+    const waterGeo = new THREE.BufferGeometry();
+    const waterPositions = new Float32Array(300 * 3);
+    waterGeo.setAttribute('position', new THREE.BufferAttribute(waterPositions, 3));
+    const waterMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 6.0, transparent: true, opacity: 0.6, depthWrite: false });
+    const waterStream = new THREE.Points(waterGeo, waterMat);
+    waterStream.visible = false;
+    scene.add(waterStream);
+
+    // Searchlight for remote player
+    const searchLight = new THREE.SpotLight(0xffffff, 0.0, 150, Math.PI / 6, 0.4, 1.5);
+    const searchLightTarget = new THREE.Object3D();
+    remoteHeli.group.add(searchLight);
+    scene.add(searchLightTarget);
+    searchLight.target = searchLightTarget;
 
     remotePlayers[id] = {
         group: remoteHeli.group,
         helicopter: remoteHeli,
         winchLine: winchLine,
+        waterStream: waterStream,
+        searchLight: searchLight,
+        searchLightTarget: searchLightTarget,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
         rotorSpeed: data.rotorSpeed || 0,
         gearDown: data.gearDown ?? true,
         winchState: data.winchState || 'STOWED',
-        isDroppingWater: data.isDroppingWater || false
+        isDroppingWater: data.isDroppingWater || false,
+        searchLightState: data.searchLightState || 'OFF'
     };
 }
 
@@ -179,11 +209,12 @@ function animate() {
             qz: player.mesh.quaternion.z,
             qw: player.mesh.quaternion.w,
             winchState: helicopterSystems.tools['WINCH'] ? helicopterSystems.tools['WINCH'].state : 'STOWED',
-            isDroppingWater: helicopterSystems.isDroppingWater || false
+            isDroppingWater: helicopterSystems.isWaterActive(),
+            searchLightState: searchLightSystem.state
         });
     }
 
-    // Smoothly update remote players' positions, rotations, gear, rotors, and tool visuals
+    // Smoothly update remote players and their visual effects
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
@@ -203,22 +234,42 @@ function animate() {
             }
         }
 
-        // Update remote winch line visual
+        // Update remote winch line
         if (rp.winchLine) {
             if (rp.winchState && rp.winchState !== 'STOWED') {
                 rp.winchLine.visible = true;
-                const heliPos = rp.group.position;
+                const pos = rp.group.position;
                 const positions = rp.winchLine.geometry.attributes.position.array;
-                positions[0] = heliPos.x;
-                positions[1] = heliPos.y;
-                positions[2] = heliPos.z;
-                positions[3] = heliPos.x;
-                positions[4] = Math.max(0, heliPos.y - 15);
-                positions[5] = heliPos.z;
+                positions[0] = pos.x; positions[1] = pos.y; positions[2] = pos.z;
+                positions[3] = pos.x; positions[4] = Math.max(0, pos.y - 15); positions[5] = pos.z;
                 rp.winchLine.geometry.attributes.position.needsUpdate = true;
             } else {
                 rp.winchLine.visible = false;
             }
+        }
+
+        // Update remote water spray particles
+        if (rp.waterStream) {
+            if (rp.isDroppingWater) {
+                rp.waterStream.visible = true;
+                const pos = rp.group.position;
+                const positions = rp.waterStream.geometry.attributes.position.array;
+                for (let i = 0; i < 300; i++) {
+                    positions[i * 3] = pos.x + (Math.random() - 0.5) * 2;
+                    positions[i * 3 + 1] = pos.y - 2 - (i * 0.1);
+                    positions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 2;
+                }
+                rp.waterStream.geometry.attributes.position.needsUpdate = true;
+            } else {
+                rp.waterStream.visible = false;
+            }
+        }
+
+        // Update remote searchlight
+        if (rp.searchLight) {
+            rp.searchLight.intensity = (rp.searchLightState !== 'OFF') ? (nightFactor * 65.0) : 0.0;
+            const pos = rp.group.position;
+            rp.searchLightTarget.position.set(pos.x, 0, pos.z + 15);
         }
     }
 
@@ -228,20 +279,13 @@ function animate() {
     hudManager.update(helicopterSystems, searchLightSystem);
 
     const mouseWorldPos = inputManager.getMouseWorldPosition();
-
     searchLightSystem.update(delta, nightFactor, mouseWorldPos);
     navRadar.update();
 
     const playerPos = player.getPosition();
     ocean.update(delta, playerPos);
 
-    const waterLevel = 0.0;
-    const focusPoint = new THREE.Vector3(
-        playerPos.x,
-        (playerPos.y + waterLevel) * 0.5,
-        playerPos.z
-    );
-
+    const focusPoint = new THREE.Vector3(playerPos.x, playerPos.y * 0.5, playerPos.z);
     const cameraOffset = new THREE.Vector3(50, 50, 50);
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
@@ -249,12 +293,10 @@ function animate() {
     const padCenter = new THREE.Vector2(0, 0);
     const pos2D = new THREE.Vector2(playerPos.x, playerPos.z);
     const distanceFromBase = pos2D.distanceTo(padCenter);
-
     const isLandedAtBase = distanceFromBase < 20.0 && player.gearDown === true && playerPos.y <= 7.0;
     
     const activeRaft = missionManager.liferaftMission;
     const isSurvivorRescued = activeRaft && (activeRaft.isRescued || helicopterSystems.tools['WINCH'].hasHookedSurvivor);
-
     const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
 
     if (showRescuedSurvivor && activeRaft && !activeRaft.isFullyCompleted) {
@@ -269,7 +311,6 @@ function animate() {
     windFarm.update(delta, camera.quaternion);
     
     player.mesh.quaternion.copy(camera.quaternion);
-
     renderer.render(scene, camera);
 }
 

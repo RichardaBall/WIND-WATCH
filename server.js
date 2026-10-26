@@ -8,9 +8,16 @@ const io = new Server(server, {
 
 let activePlayers = {};
 
+let worldState = {
+    weather: 'CLEAR',
+    cloudSeed: Math.floor(Math.random() * 1000000)
+};
+
 let currentMission = {
+    type: 'LIFERAFT',
     x: (Math.random() - 0.5) * 400,
     z: (Math.random() - 0.5) * 400,
+    turbineIndex: 0,
     isCompleted: false
 };
 
@@ -25,10 +32,13 @@ io.on('connection', (socket) => {
         gearDown: true,
         qx: 0, qy: 0, qz: 0, qw: 1,
         winchState: 'STOWED',
-        isDroppingWater: false
+        isDroppingWater: false,
+        isSearching: false,
+        searchLightState: 'OFF'
     };
 
     socket.emit('current-players', activePlayers);
+    socket.emit('sync-world', worldState);
     socket.emit('sync-mission', currentMission);
     socket.broadcast.emit('player-joined', activePlayers[socket.id]);
 
@@ -46,6 +56,7 @@ io.on('connection', (socket) => {
             activePlayers[socket.id].qw = data.qw;
             activePlayers[socket.id].winchState = data.winchState;
             activePlayers[socket.id].isDroppingWater = data.isDroppingWater;
+            activePlayers[socket.id].searchLightState = data.searchLightState;
         }
         socket.broadcast.emit('remote-player-update', {
             id: socket.id,
@@ -58,9 +69,13 @@ io.on('connection', (socket) => {
         io.emit('mission-completed');
         
         setTimeout(() => {
+            const types = ['LIFERAFT', 'WTG_FIRE'];
+            const nextType = types[Math.floor(Math.random() * types.length)];
             currentMission = {
+                type: nextType,
                 x: (Math.random() - 0.5) * 400,
                 z: (Math.random() - 0.5) * 400,
+                turbineIndex: Math.floor(Math.random() * 5),
                 isCompleted: false
             };
             io.emit('sync-mission', currentMission);
