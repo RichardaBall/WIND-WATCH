@@ -67,6 +67,8 @@ socket.on('remote-player-update', (data) => {
     if (remotePlayers[data.id]) {
         const rp = remotePlayers[data.id];
         rp.targetPos.set(data.x, data.y, data.z);
+        rp.targetFrame = data.currentFrame;
+        rp.rotorSpeed = data.rotorSpeed;
         rp.gearDown = data.gearDown;
     }
 });
@@ -82,8 +84,11 @@ function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
     remotePlayers[id] = {
         group: remoteHeli.group,
+        helicopter: remoteHeli,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
-        helicopter: remoteHeli
+        targetFrame: data.currentFrame || 5,
+        rotorSpeed: data.rotorSpeed || 0,
+        gearDown: data.gearDown ?? true
     };
 }
 
@@ -114,7 +119,7 @@ function animate() {
 
     player.update(delta, nightFactor, windForce);
     
-    // Send local player position to the server periodically (~20 times a second)
+    // Send local player position, animation frame, and rotor speed to server
     networkTimer += delta;
     if (networkTimer >= 0.05) {
         networkTimer = 0;
@@ -123,15 +128,32 @@ function animate() {
             x: pos.x,
             y: pos.y,
             z: pos.z,
-            gearDown: player.gearDown,
-            winchState: player.winchState
+            currentFrame: player.currentFrame,
+            rotorSpeed: player.rotorSpeed,
+            gearDown: player.gearDown
         });
     }
 
-    // Smoothly update remote players
+    // Smoothly update remote players' positions and animate their rotors/sprites
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
+
+        // Animate remote rotors
+        if (rp.helicopter && rp.helicopter.rotorBlades) {
+            for (const blade of rp.helicopter.rotorBlades) {
+                blade.rotation.z += rp.rotorSpeed * delta;
+            }
+        }
+
+        // Update remote sprite frame direction if changed
+        if (rp.helicopter && rp.helicopter.material && rp.helicopter.material.map) {
+            const frameOffset = rp.targetFrame * (1 / rp.helicopter.totalFrames);
+            rp.helicopter.material.map.offset.x = frameOffset;
+            if (rp.helicopter.material.emissiveMap) {
+                rp.helicopter.material.emissiveMap.offset.x = frameOffset;
+            }
+        }
     }
 
     helicopterSystems.update(delta);
@@ -184,10 +206,8 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// Start render loop immediately in background
 animate();
 
-// Handle smooth loading screen progress and fade-out when START is clicked
 window.addEventListener('start-loading-game', () => {
     const progressBar = document.getElementById('loading-progress');
     const loadingStatus = document.getElementById('loading-status');

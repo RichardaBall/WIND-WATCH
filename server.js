@@ -14,9 +14,9 @@ io.on('connection', (socket) => {
     activePlayers[socket.id] = {
         id: socket.id,
         x: 0, y: 6, z: 0,
-        rot: 0,
-        gearDown: true,
-        winchState: 'STOWED'
+        currentFrame: 5,
+        rotorSpeed: 0,
+        gearDown: true
     };
 
     socket.emit('current-players', activePlayers);
@@ -27,9 +27,9 @@ io.on('connection', (socket) => {
             activePlayers[socket.id].x = data.x;
             activePlayers[socket.id].y = data.y;
             activePlayers[socket.id].z = data.z;
-            activePlayers[socket.id].rot = data.rot;
+            activePlayers[socket.id].currentFrame = data.currentFrame;
+            activePlayers[socket.id].rotorSpeed = data.rotorSpeed;
             activePlayers[socket.id].gearDown = data.gearDown;
-            activePlayers[socket.id].winchState = data.winchState;
         }
         socket.broadcast.emit('remote-player-update', {
             id: socket.id,
