@@ -17,11 +17,11 @@ export class MissionManager {
         this.currentMissionInstance = null;
         this.lastMissionKey = null;
 
-        // Registry mapping mission keys to factory functions that instantiate mission objects
         this.availableMissions = {
             'LIFERAFT': (missionData) => {
                 const pos = missionData && missionData.x !== undefined ? new THREE.Vector3(missionData.x, 0.05, missionData.z) : null;
-                const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem, pos);
+                const variant = missionData ? missionData.variantIndex : null;
+                const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem, pos, variant);
                 if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
                     this.helicopterSystems.tools['WINCH'].setLiferaftMission(mission);
                 }
@@ -34,7 +34,6 @@ export class MissionManager {
     }
 
     registerPermanentLandmarks() {
-        // Base is always blue
         this.navRadar.addOrUpdateMarker('main_base', new THREE.Vector3(0, 0, 0), '#3498db', 'BASE');
     }
 
@@ -54,12 +53,12 @@ export class MissionManager {
     createWtgFireMission(missionData) {
         if (!this.windFarm || this.windFarm.turbines.length === 0) return null;
 
-        const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : Math.floor(Math.random() * this.windFarm.turbines.length);
+        const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : 0;
         this.windFarm.setTurbineFire(turbineIndex, true);
         
         const turbineWorldPos = this.windFarm.getTurbineWorldPosition(turbineIndex);
         this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
-        console.log(`🔥 Active Server Mission Spawned: WTG Fire on turbine index ${turbineIndex}!`);
+        console.log(`🔥 Synced Server Mission Spawned: WTG Fire on turbine index ${turbineIndex}!`);
 
         let extinguishProgress = 0;
 
@@ -111,6 +110,7 @@ export class MissionManager {
 
         this.currentMissionInstance = null;
         this.currentMissionKey = null;
+        this.missionState = 'READY';
     }
 
     spawnSpecificMission(type, missionData) {
@@ -121,12 +121,13 @@ export class MissionManager {
         if (this.availableMissions[type]) {
             this.currentMissionInstance = this.availableMissions[type](missionData);
         }
-        console.log(`🚀 Synced Server-Authoritative Mission Spawned: [${type}]`);
+        console.log(`🚀 Server-Authoritative Mission Synchronized: [${type}]`);
     }
 
     completeActiveMission() {
         console.log("🧪 Test Trigger: Forcibly completing current mission...");
-        if (this.socket) {
+        if (this.socket && this.missionState === 'ACTIVE') {
+            this.missionState = 'COMPLETED';
             this.socket.emit('complete-mission');
         } else {
             this.clearAllMissions();
@@ -186,7 +187,7 @@ export class MissionManager {
             if (isComplete && this.missionState === 'ACTIVE') {
                 this.missionState = 'COMPLETED';
                 this.lastMissionKey = this.currentMissionKey;
-                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Sending validation request to server...`);
+                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Notifying server...`);
                 if (this.socket) {
                     this.socket.emit('complete-mission');
                 } else {

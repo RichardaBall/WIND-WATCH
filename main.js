@@ -341,7 +341,7 @@ function animate() {
         activeRaft.fadeRaft(delta);
         if (mainBase.hasFadedOut) {
             activeRaft.isFullyCompleted = true;
-            socket.emit('complete-mission');
+            missionManager.completeActiveMission();
         }
     }
 

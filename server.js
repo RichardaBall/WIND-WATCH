@@ -17,11 +17,13 @@ let worldState = {
 function generateRandomMission() {
     const types = ['LIFERAFT', 'WTG_FIRE'];
     const type = types[Math.floor(Math.random() * types.length)];
+    
     if (type === 'LIFERAFT') {
         return {
             type: 'LIFERAFT',
             x: (Math.random() - 0.5) * 400,
             z: (Math.random() - 0.5) * 400,
+            variantIndex: Math.random() < 0.5 ? 0 : 1,
             isCompleted: false
         };
     } else {
@@ -73,13 +75,10 @@ io.on('connection', (socket) => {
 
     socket.on('complete-mission', () => {
         if (currentMission.isCompleted) return;
-        
-        const player = activePlayers[socket.id];
-        if (!player) return;
-
         currentMission.isCompleted = true;
-        io.emit('mission-completed', currentMission);
-        console.log(`🏆 Mission [${currentMission.type}] completed by player ${socket.id}. Spawning next mission...`);
+        
+        io.emit('mission-completed');
+        console.log(`🏆 Mission [${currentMission.type}] completed globally. Rotating to next mission...`);
         
         setTimeout(() => {
             currentMission = generateRandomMission();

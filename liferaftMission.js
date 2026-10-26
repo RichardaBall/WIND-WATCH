@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class LiferaftMission {
-    constructor(scene, player, navRadar, searchLightSystem = null, customPosition = null) {
+    constructor(scene, player, navRadar, searchLightSystem = null, customPosition = null, serverVariantIndex = null) {
         this.scene = scene;
         this.player = player;
         this.navRadar = navRadar;
@@ -12,12 +12,12 @@ export class LiferaftMission {
 
         const textureLoader = new THREE.TextureLoader();
 
-        // --- Randomly choose between variation 0 and variation 1 ---
-        this.variantIndex = Math.random() < 0.5 ? 0 : 1;
+        // --- Use server-provided variant index to ensure 100% identical state across all clients ---
+        this.variantIndex = serverVariantIndex !== null && serverVariantIndex !== undefined ? serverVariantIndex : (Math.random() < 0.5 ? 0 : 1);
         const raftTextureName = `raft1_angle_${this.variantIndex}.png`;
         const survivorTextureName = `survivor_angle_${this.variantIndex}.png`;
 
-        console.log(`🛟 Spawning Liferaft Mission with variant set: ${raftTextureName} & ${survivorTextureName} (Variant Index: ${this.variantIndex})`);
+        console.log(`🛟 Spawning Synced Liferaft Mission with variant set: ${raftTextureName} & ${survivorTextureName} (Variant Index: ${this.variantIndex})`);
 
         // --- 1. Load Raft Sprite ---
         this.raftMat = new THREE.MeshStandardMaterial({
@@ -106,14 +106,12 @@ export class LiferaftMission {
         this.lightHolder.add(this.flashingPointLight);
         this.group.add(this.lightHolder);
 
-        // Use custom position if provided, otherwise generate a random ocean location
         if (customPosition) {
             this.group.position.copy(customPosition);
         } else {
             this.group.position.copy(LiferaftMission.generateRandomSpawnPosition());
         }
 
-        // Register on Radar with red marker for active mission
         if (this.navRadar) {
             this.navRadar.addOrUpdateMarker('liferaft', this.group.position, '#e74c3c', 'RAFT');
         }
@@ -125,7 +123,6 @@ export class LiferaftMission {
     static generateRandomSpawnPosition() {
         const minDistance = 350;
         const maxDistance = 750;
-        
         const angle = Math.random() * Math.PI * 2;
         const distance = minDistance + Math.random() * (maxDistance - minDistance);
 
@@ -138,8 +135,6 @@ export class LiferaftMission {
             finalX += 300; 
             finalZ -= 300;
         }
-
-        console.log(`🛟 Liferaft spawned at ocean coordinates: x=${finalX.toFixed(0)}, z=${finalZ.toFixed(0)}`);
         return new THREE.Vector3(finalX, 0.05, finalZ);
     }
 
@@ -169,19 +164,23 @@ export class LiferaftMission {
             if (this.raftMat.opacity <= 0) {
                 this.raftMesh.visible = false;
                 this.isFullyCompleted = true;
-                if (this.group) {
-                    this.scene.remove(this.group);
-                }
+                this.cleanup();
             }
         }
     }
 
-    update(delta, cameraQuaternion, nightFactor = 0, searchLightSystem = null) {
-        if (this.isFullyCompleted) return;
-
-        if (this.isRescued) {
-            return;
+    cleanup() {
+        if (this.group) {
+            this.scene.remove(this.group);
         }
+        if (this.navRadar) {
+            this.navRadar.removeMarker('liferaft');
+        }
+    }
+
+    update(delta, cameraQuaternion, nightFactor = 0, searchLightSystem = null) {
+        if (this.isFullyCompleted) return true;
+        if (this.isRescued) return false;
 
         this.animationTimer += delta;
         if (this.animationTimer >= 1.0 / this.fps) {
@@ -194,7 +193,6 @@ export class LiferaftMission {
         }
 
         let colorFactor = 1.0 - nightFactor * 0.7;
-
         const slSys = searchLightSystem || this.searchLightSystem;
         if (slSys && slSys.state !== 'OFF') {
             const lightPos = slSys.lightPoolMesh.position;
@@ -220,5 +218,7 @@ export class LiferaftMission {
             this.survivorMesh.quaternion.copy(cameraQuaternion);
             this.flashingMarker.quaternion.copy(cameraQuaternion);
         }
+
+        return false;
     }
 }
