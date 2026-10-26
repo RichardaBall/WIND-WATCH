@@ -18,15 +18,14 @@ import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
 import { CloudSystem } from './cloudSystem.js';
 import { WaterSystem } from './waterSystem.js';
+import { WinchSystem } from './winchSystem.js';
 
-// Connect to your online cloud server
 const socket = io('https://wind-watch-server.onrender.com');
 
 socket.on('connect', () => {
     console.log('Connected to internet co-op server!');
 });
 
-// Initialize Game Systems immediately in the background
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
 const ocean = new OceanWater(scene, sunLight);
@@ -49,7 +48,6 @@ const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem);
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
-// Dictionary to track remote players
 const remotePlayers = {};
 
 socket.on('current-players', (players) => {
@@ -65,7 +63,10 @@ socket.on('player-joined', (playerData) => {
 });
 
 socket.on('sync-world', (worldData) => {
-    if (weatherSystem && typeof weatherSystem.setWeather === 'function') {
+    if (worldData.timeOfDay !== undefined && dayNightCycle) {
+        dayNightCycle.timeOfDay = worldData.timeOfDay;
+    }
+    if (worldData.weather !== undefined && weatherSystem) {
         weatherSystem.setWeather(worldData.weather);
     }
 });
@@ -83,9 +84,18 @@ socket.on('remote-player-update', (data) => {
         rp.searchLightState = data.searchLightState;
 
         if (rp.helicopter) {
-            rp.helicopter.gearDown = data.gearDown;
-            if (typeof rp.helicopter.updateGearVisuals === 'function') {
-                rp.helicopter.updateGearVisuals(data.gearDown);
+            if (rp.helicopter.gearDown !== data.gearDown) {
+                rp.helicopter.gearDown = data.gearDown;
+                const currentOffset = rp.helicopter.material.map ? rp.helicopter.material.map.offset.x : 0;
+                if (data.gearDown && rp.helicopter.gearDownTex) {
+                    rp.helicopter.material.map = rp.helicopter.gearDownTex;
+                } else if (!data.gearDown && rp.helicopter.gearUpTex) {
+                    rp.helicopter.material.map = rp.helicopter.gearUpTex;
+                }
+                if (rp.helicopter.material.map) {
+                    rp.helicopter.material.map.offset.x = currentOffset;
+                }
+                rp.helicopter.material.needsUpdate = true;
             }
         }
 
@@ -102,7 +112,11 @@ socket.on('remote-player-update', (data) => {
 socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
-        if (remotePlayers[id].winchLine) scene.remove(remotePlayers[id].winchLine);
+        if (remotePlayers[id].winchSystem && remotePlayers[id].winchSystem.cableLine) {
+            scene.remove(remotePlayers[id].winchSystem.cableLine);
+            scene.remove(remotePlayers[id].winchSystem.hookMesh);
+            scene.remove(remotePlayers[id].winchSystem.rotorWashSystem);
+        }
         if (remotePlayers[id].waterSystem && remotePlayers[id].waterSystem.particleSystem) {
             scene.remove(remotePlayers[id].waterSystem.particleSystem);
             scene.remove(remotePlayers[id].waterSystem.splashSystem);
@@ -113,41 +127,26 @@ socket.on('player-disconnected', (id) => {
 });
 
 socket.on('sync-mission', (missionData) => {
-    if (missionManager) {
-        if (missionData.type === 'LIFERAFT') {
-            if (missionManager.currentMissionKey !== 'LIFERAFT') {
-                missionManager.spawnSpecificMission('LIFERAFT', missionData);
-            } else if (missionManager.currentMissionInstance && typeof missionManager.currentMissionInstance.setPosition === 'function') {
-                missionManager.currentMissionInstance.setPosition(missionData.x, missionData.z);
-            }
-        } else if (missionData.type === 'WTG_FIRE') {
-            if (missionManager.currentMissionKey !== 'WTG_FIRE') {
-                missionManager.spawnSpecificMission('WTG_FIRE', missionData);
-            }
+    if (missionManager && missionManager.liferaftMission) {
+        if (typeof missionManager.liferaftMission.setPosition === 'function') {
+            missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
+        } else if (missionManager.liferaftMission.group) {
+            missionManager.liferaftMission.group.position.set(missionData.x, 0.05, missionData.z);
         }
     }
 });
 
 socket.on('mission-completed', () => {
-    if (missionManager && missionManager.currentMissionInstance) {
-        missionManager.currentMissionInstance.isFullyCompleted = true;
+    if (missionManager && missionManager.liferaftMission) {
+        missionManager.liferaftMission.isFullyCompleted = true;
     }
 });
 
 function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
-    
-    // Winch line for remote player
-    const lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
-    const lineMat = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 3 });
-    const winchLine = new THREE.Line(lineGeo, lineMat);
-    winchLine.visible = false;
-    scene.add(winchLine);
-
-    // Identical WaterSystem instance for remote player
     const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, { gearDown: false });
+    const remoteWinchSystem = new WinchSystem(scene, remoteHeli.group, { gearDown: false });
 
-    // Searchlight for remote player
     const searchLight = new THREE.SpotLight(0xffffff, 0.0, 150, Math.PI / 6, 0.4, 1.5);
     const searchLightTarget = new THREE.Object3D();
     remoteHeli.group.add(searchLight);
@@ -157,8 +156,8 @@ function spawnRemotePlayer(id, data) {
     remotePlayers[id] = {
         group: remoteHeli.group,
         helicopter: remoteHeli,
-        winchLine: winchLine,
         waterSystem: remoteWaterSystem,
+        winchSystem: remoteWinchSystem,
         searchLight: searchLight,
         searchLightTarget: searchLightTarget,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
@@ -218,9 +217,13 @@ function animate() {
             isDroppingWater: helicopterSystems.isWaterActive(),
             searchLightState: searchLightSystem.state
         });
+
+        socket.emit('world-update', {
+            timeOfDay: dayNightCycle.timeOfDay,
+            weather: weatherSystem.targetWeather
+        });
     }
 
-    // Smoothly update remote players and their visual effects
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
@@ -240,26 +243,16 @@ function animate() {
             }
         }
 
-        // Update remote winch line
-        if (rp.winchLine) {
-            if (rp.winchState && rp.winchState !== 'STOWED') {
-                rp.winchLine.visible = true;
-                const pos = rp.group.position;
-                const positions = rp.winchLine.geometry.attributes.position.array;
-                positions[0] = pos.x; positions[1] = pos.y; positions[2] = pos.z;
-                positions[3] = pos.x; positions[4] = Math.max(0, pos.y - 15); positions[5] = pos.z;
-                rp.winchLine.geometry.attributes.position.needsUpdate = true;
+        if (rp.waterSystem) rp.waterSystem.update(delta);
+        if (rp.winchSystem) {
+            if (rp.winchState !== 'STOWED') {
+                rp.winchSystem.currentExtension = 1.0;
             } else {
-                rp.winchLine.visible = false;
+                rp.winchSystem.currentExtension = 0.0;
             }
+            rp.winchSystem.update(delta, rp.helicopter.mesh.quaternion);
         }
 
-        // Update remote water system simulation
-        if (rp.waterSystem) {
-            rp.waterSystem.update(delta);
-        }
-
-        // Update remote searchlight
         if (rp.searchLight) {
             rp.searchLight.intensity = (rp.searchLightState !== 'OFF') ? (nightFactor * 65.0) : 0.0;
             const pos = rp.group.position;

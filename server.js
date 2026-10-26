@@ -9,15 +9,14 @@ const io = new Server(server, {
 let activePlayers = {};
 
 let worldState = {
-    weather: 'CLEAR',
-    cloudSeed: Math.floor(Math.random() * 1000000)
+    timeOfDay: 0.25,
+    weather: 'CLEAR'
 };
 
 let currentMission = {
     type: 'LIFERAFT',
     x: (Math.random() - 0.5) * 400,
     z: (Math.random() - 0.5) * 400,
-    turbineIndex: 0,
     isCompleted: false
 };
 
@@ -33,7 +32,6 @@ io.on('connection', (socket) => {
         qx: 0, qy: 0, qz: 0, qw: 1,
         winchState: 'STOWED',
         isDroppingWater: false,
-        isSearching: false,
         searchLightState: 'OFF'
     };
 
@@ -64,18 +62,21 @@ io.on('connection', (socket) => {
         });
     });
 
+    socket.on('world-update', (data) => {
+        if (data.timeOfDay !== undefined) worldState.timeOfDay = data.timeOfDay;
+        if (data.weather !== undefined) worldState.weather = data.weather;
+        socket.broadcast.emit('sync-world', worldState);
+    });
+
     socket.on('complete-mission', () => {
         currentMission.isCompleted = true;
         io.emit('mission-completed');
         
         setTimeout(() => {
-            const types = ['LIFERAFT', 'WTG_FIRE'];
-            const nextType = types[Math.floor(Math.random() * types.length)];
             currentMission = {
-                type: nextType,
+                type: 'LIFERAFT',
                 x: (Math.random() - 0.5) * 400,
                 z: (Math.random() - 0.5) * 400,
-                turbineIndex: Math.floor(Math.random() * 5),
                 isCompleted: false
             };
             io.emit('sync-mission', currentMission);
