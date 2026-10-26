@@ -79,7 +79,7 @@ socket.on('remote-player-update', (data) => {
         rp.targetFrame = data.currentFrame;
         rp.rotorSpeed = data.rotorSpeed;
         rp.gearDown = data.gearDown;
-        rp.winchState = data.winchState;
+        rp.winchState = data.winchState || 'STOWED';
         rp.isDroppingWater = data.isDroppingWater;
         rp.searchLightState = data.searchLightState;
 
@@ -202,6 +202,9 @@ function animate() {
     if (networkTimer >= 0.05) {
         networkTimer = 0;
         const pos = player.getPosition();
+        const winchTool = helicopterSystems.tools['WINCH'];
+        const currentWinchState = winchTool ? (winchTool.isActive ? 'DEPLOYED' : 'STOWED') : 'STOWED';
+
         socket.emit('player-update', {
             x: pos.x,
             y: pos.y,
@@ -213,7 +216,7 @@ function animate() {
             qy: player.mesh.quaternion.y,
             qz: player.mesh.quaternion.z,
             qw: player.mesh.quaternion.w,
-            winchState: helicopterSystems.tools['WINCH'] ? helicopterSystems.tools['WINCH'].state : 'STOWED',
+            winchState: currentWinchState,
             isDroppingWater: helicopterSystems.isWaterActive(),
             searchLightState: searchLightSystem.state
         });
@@ -245,10 +248,10 @@ function animate() {
 
         if (rp.waterSystem) rp.waterSystem.update(delta);
         if (rp.winchSystem) {
-            if (rp.winchState !== 'STOWED') {
-                rp.winchSystem.currentExtension = 1.0;
+            if (rp.winchState === 'DEPLOYED') {
+                rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 1.0, delta * 2.0);
             } else {
-                rp.winchSystem.currentExtension = 0.0;
+                rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 0.0, delta * 2.0);
             }
             rp.winchSystem.update(delta, rp.helicopter.mesh.quaternion);
         }

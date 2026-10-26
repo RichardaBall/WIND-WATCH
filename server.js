@@ -69,6 +69,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('complete-mission', () => {
+        if (currentMission.isCompleted) return;
         currentMission.isCompleted = true;
         io.emit('mission-completed');
         
