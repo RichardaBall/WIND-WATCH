@@ -151,11 +151,11 @@ export class MissionManager {
     }
 
     completeActiveMission() {
-        console.log("🧪 Test Trigger: Forcibly completing current mission and spawning next...");
+        console.log("🧪 Test Trigger: Forcibly completing current mission...");
         if (this.currentMissionKey) {
             this.lastMissionKey = this.currentMissionKey;
         }
-        this.spawnRandomMission();
+        this.clearAllMissions();
     }
 
     // Getter for main.js base landing logic check
@@ -211,8 +211,10 @@ export class MissionManager {
 
             if (isComplete) {
                 this.lastMissionKey = this.currentMissionKey;
-                console.log(`🎉 Mission [${this.currentMissionKey}] Completed! Spawning next random mission immediately...`);
-                this.spawnRandomMission();
+                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Waiting for server sync...`);
+                this.currentMissionInstance = null;
+                this.currentMissionKey = null;
+                this.missionState = 'READY';
             }
         }
     }
