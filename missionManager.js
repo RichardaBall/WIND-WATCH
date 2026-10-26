@@ -141,7 +141,6 @@ export class MissionManager {
     update(delta, playerPosition, nightFactor) {
         if (!this.windFarm || !this.helicopterSystems) return;
 
-        // Universal Main Base Restocking Logic
         const distToBase = playerPosition.distanceTo(new THREE.Vector3(0, 0, 0));
         const player = this.helicopterSystems.playerRef;
         const isNearBase = distToBase < 25.0;
@@ -174,7 +173,6 @@ export class MissionManager {
             this.helicopterSystems.water = Math.min(this.helicopterSystems.maxWater, this.helicopterSystems.water + delta * waterRate);
         }
 
-        // Handle Active Mission Updates dynamically
         if (this.missionState === 'ACTIVE' && this.currentMissionInstance) {
             let isComplete = false;
 

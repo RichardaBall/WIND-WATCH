@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 
 export class WinchSystem {
-    constructor(scene, parentGroup, playerRef) {
+    constructor(scene, parentGroup, playerRef, socket = null) {
         this.scene = scene;
         this.parentGroup = parentGroup;
         this.playerRef = playerRef;
+        this.socket = socket;
         this.isActive = false;
 
         this.currentExtension = 0.0;
-        this.targetExtension = 0.0; // 0 = retracted at belly, 1 = extended to sea level
+        this.targetExtension = 0.0;
         this.localAnchorY = -0.5;
         this.isDescendingForWinch = false;
 
@@ -60,13 +61,11 @@ export class WinchSystem {
         this.scene.add(this.rotorWashSystem);
         this.washSpawnIndex = 0;
 
-        // Hook position tracking
         this.hookWorldPos = new THREE.Vector3();
         this.lastHeliWorldPos = new THREE.Vector3();
         this.parentGroup.getWorldPosition(this.lastHeliWorldPos);
         this.hookWorldPos.copy(this.lastHeliWorldPos).add(new THREE.Vector3(0, this.localAnchorY, 0));
 
-        // Winch cable line setup
         this.curvePointsCount = 10;
         const points = [];
         for (let i = 0; i < this.curvePointsCount; i++) {
@@ -78,7 +77,6 @@ export class WinchSystem {
         this.cableLine.frustumCulled = false;
         this.scene.add(this.cableLine);
 
-        // Winch hook mesh
         const hookGeo = new THREE.ConeGeometry(0.2, 0.5, 6);
         const hookMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, roughness: 0.3 });
         this.hookMesh = new THREE.Mesh(hookGeo, hookMat);
@@ -86,7 +84,6 @@ export class WinchSystem {
         this.hookMesh.visible = false;
         this.scene.add(this.hookMesh);
 
-        // Survivor cargo mesh attached to hook
         const survivorGeo = new THREE.PlaneGeometry(3, 3);
         const survivorMat = new THREE.MeshStandardMaterial({
             color: 0xffffff,
@@ -226,7 +223,6 @@ export class WinchSystem {
             }
         }
 
-        // --- Update Rotor Wash Mist Particles ---
         const washPos = this.washGeometry.attributes.position.array;
         const waterLevel = 0.0;
         const heightAboveWater = heliWorldPos.y - waterLevel;
@@ -310,7 +306,6 @@ export class WinchSystem {
                 this.hookWorldPos.y = Math.max(0.0, this.hookWorldPos.y);
             }
 
-            // Latch check: Increased distance threshold from 1.8 to 4.5 to reliably catch both variant 0 and variant 1
             if (this.isActive && this.currentExtension > 0.95 && this.liferaftMissionRef && !this.hasHookedSurvivor && !this.liferaftMissionRef.isRescued) {
                 const survivorPos = this.liferaftMissionRef.getSurvivorWorldPosition();
                 const dist = this.hookWorldPos.distanceTo(survivorPos);
@@ -319,6 +314,9 @@ export class WinchSystem {
                     this.hookedSurvivorMesh.visible = true;
                     if (this.liferaftMissionRef) {
                         this.liferaftMissionRef.setSurvivorRescued(true);
+                    }
+                    if (this.socket) {
+                        this.socket.emit('survivor-hooked');
                     }
                     console.log("🪝 Winch hook latched onto survivor! Retracting...");
                     this.toggle();

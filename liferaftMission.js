@@ -12,14 +12,12 @@ export class LiferaftMission {
 
         const textureLoader = new THREE.TextureLoader();
 
-        // --- Use server-provided variant index to ensure 100% identical state across all clients ---
         this.variantIndex = serverVariantIndex !== null && serverVariantIndex !== undefined ? serverVariantIndex : (Math.random() < 0.5 ? 0 : 1);
         const raftTextureName = `raft1_angle_${this.variantIndex}.png`;
         const survivorTextureName = `survivor_angle_${this.variantIndex}.png`;
 
         console.log(`🛟 Spawning Synced Liferaft Mission with variant set: ${raftTextureName} & ${survivorTextureName} (Variant Index: ${this.variantIndex})`);
 
-        // --- 1. Load Raft Sprite ---
         this.raftMat = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             roughness: 0.4,
@@ -46,7 +44,6 @@ export class LiferaftMission {
         this.raftMesh = new THREE.Mesh(raftGeo, this.raftMat);
         this.group.add(this.raftMesh);
 
-        // --- 2. Load Survivor Animated Sprite Sheet (90 Frames) ---
         this.totalFrames = 90;
         this.currentFrame = 0;
         this.isRescued = false;
@@ -79,7 +76,6 @@ export class LiferaftMission {
         const survivorGeo = new THREE.PlaneGeometry(3, 3);
         this.survivorMesh = new THREE.Mesh(survivorGeo, this.survivorMat);
         
-        // --- Variant-specific positions using a fixed holder group ---
         this.survivorHolder = new THREE.Group();
         if (this.variantIndex === 1) {
             this.survivorHolder.position.set(1.95, 3.30, 0.30);
@@ -89,7 +85,6 @@ export class LiferaftMission {
         this.survivorHolder.add(this.survivorMesh);
         this.group.add(this.survivorHolder);
 
-        // --- 3. Helipad-Style Glowing Red Light Setup ---
         const lightMarkerGeo = new THREE.SphereGeometry(0.18, 16, 16);
         this.flashingLightMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
         this.flashingMarker = new THREE.Mesh(lightMarkerGeo, this.flashingLightMat);

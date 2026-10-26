@@ -24,6 +24,7 @@ function generateRandomMission() {
             x: (Math.random() - 0.5) * 400,
             z: (Math.random() - 0.5) * 400,
             variantIndex: Math.random() < 0.5 ? 0 : 1,
+            isRescued: false,
             isCompleted: false
         };
     } else {
@@ -71,6 +72,13 @@ io.on('connection', (socket) => {
         if (data.timeOfDay !== undefined) worldState.timeOfDay = data.timeOfDay;
         if (data.weather !== undefined) worldState.weather = data.weather;
         socket.broadcast.emit('sync-world', worldState);
+    });
+
+    socket.on('survivor-hooked', () => {
+        if (currentMission.isRescued || currentMission.isCompleted) return;
+        currentMission.isRescued = true;
+        io.emit('survivor-rescued');
+        console.log(`🛟 Survivor hooked by player ${socket.id}. Removing from all clients...`);
     });
 
     socket.on('complete-mission', () => {

@@ -37,6 +37,9 @@ const player = new HelicopterPlayer(scene);
 const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
 
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
+// Pass socket to WinchSystem so it can emit survivor hooks globally
+helicopterSystems.tools['WINCH'].socket = socket;
+
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
 
@@ -140,6 +143,12 @@ socket.on('sync-mission', (missionData) => {
     }
     if (missionManager) {
         missionManager.spawnSpecificMission(missionData.type, missionData);
+    }
+});
+
+socket.on('survivor-rescued', () => {
+    if (missionManager && missionManager.liferaftMission) {
+        missionManager.liferaftMission.setSurvivorRescued(true);
     }
 });
 
