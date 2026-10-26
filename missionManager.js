@@ -177,7 +177,8 @@ export class MissionManager {
             let isComplete = false;
 
             if (this.currentMissionKey === 'LIFERAFT') {
-                isComplete = this.currentMissionInstance.update(delta, this.camera.quaternion, nightFactor, this.searchLightSystem);
+                this.currentMissionInstance.update(delta, this.camera.quaternion, nightFactor, this.searchLightSystem);
+                isComplete = false;
             } else {
                 isComplete = this.currentMissionInstance.update(delta, playerPosition, nightFactor);
             }

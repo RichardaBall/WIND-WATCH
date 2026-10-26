@@ -174,7 +174,7 @@ export class LiferaftMission {
     }
 
     update(delta, cameraQuaternion, nightFactor = 0, searchLightSystem = null) {
-        if (this.isFullyCompleted) return true;
+        if (this.isFullyCompleted) return false;
         if (this.isRescued) return false;
 
         this.animationTimer += delta;
