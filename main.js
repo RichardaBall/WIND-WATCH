@@ -71,6 +71,8 @@ socket.on('remote-player-update', (data) => {
         rp.targetFrame = data.currentFrame;
         rp.rotorSpeed = data.rotorSpeed;
         rp.gearDown = data.gearDown;
+        rp.winchState = data.winchState;
+        rp.isDroppingWater = data.isDroppingWater;
     }
 });
 
@@ -78,6 +80,19 @@ socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
         delete remotePlayers[id];
+    }
+});
+
+// Sync mission position from server
+socket.on('sync-mission', (missionData) => {
+    if (missionManager && missionManager.liferaftMission) {
+        missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
+    }
+});
+
+socket.on('mission-completed', () => {
+    if (missionManager && missionManager.liferaftMission) {
+        missionManager.liferaftMission.isFullyCompleted = true;
     }
 });
 
@@ -90,7 +105,9 @@ function spawnRemotePlayer(id, data) {
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
         rotorSpeed: data.rotorSpeed || 0,
-        gearDown: data.gearDown ?? true
+        gearDown: data.gearDown ?? true,
+        winchState: data.winchState || 'STOWED',
+        isDroppingWater: data.isDroppingWater || false
     };
 }
 
@@ -121,7 +138,6 @@ function animate() {
 
     player.update(delta, nightFactor, windForce);
     
-    // Send local player position, rotation, animation frame, and rotor speed to server
     networkTimer += delta;
     if (networkTimer >= 0.05) {
         networkTimer = 0;
@@ -136,24 +152,23 @@ function animate() {
             qx: player.mesh.quaternion.x,
             qy: player.mesh.quaternion.y,
             qz: player.mesh.quaternion.z,
-            qw: player.mesh.quaternion.w
+            qw: player.mesh.quaternion.w,
+            winchState: player.winchState,
+            isDroppingWater: helicopterSystems.isDroppingWater || false
         });
     }
 
-    // Smoothly update remote players' positions, rotations, and animate rotors
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
         rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
 
-        // Animate remote rotors
         if (rp.helicopter && rp.helicopter.rotorBlades) {
             for (const blade of rp.helicopter.rotorBlades) {
                 blade.rotation.z += rp.rotorSpeed * delta;
             }
         }
 
-        // Update remote sprite frame direction if changed
         if (rp.helicopter && rp.helicopter.material && rp.helicopter.material.map) {
             const frameOffset = rp.targetFrame * (1 / rp.helicopter.totalFrames);
             rp.helicopter.material.map.offset.x = frameOffset;
@@ -198,10 +213,12 @@ function animate() {
 
     const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
 
-    if (showRescuedSurvivor && activeRaft) {
+    // Check if local player completed the mission and notify server
+    if (showRescuedSurvivor && activeRaft && !activeRaft.isFullyCompleted) {
         activeRaft.fadeRaft(delta);
         if (mainBase.hasFadedOut) {
             activeRaft.isFullyCompleted = true;
+            socket.emit('complete-mission');
         }
     }
 
