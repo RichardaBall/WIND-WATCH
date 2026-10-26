@@ -73,6 +73,13 @@ socket.on('remote-player-update', (data) => {
         rp.gearDown = data.gearDown;
         rp.winchState = data.winchState;
         rp.isDroppingWater = data.isDroppingWater;
+
+        if (rp.helicopter) {
+            rp.helicopter.gearDown = data.gearDown;
+            if (typeof rp.helicopter.updateGearVisuals === 'function') {
+                rp.helicopter.updateGearVisuals(data.gearDown);
+            }
+        }
     }
 });
 
@@ -83,10 +90,13 @@ socket.on('player-disconnected', (id) => {
     }
 });
 
-// Sync mission position from server
 socket.on('sync-mission', (missionData) => {
     if (missionManager && missionManager.liferaftMission) {
-        missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
+        if (typeof missionManager.liferaftMission.setPosition === 'function') {
+            missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
+        } else if (missionManager.liferaftMission.mesh) {
+            missionManager.liferaftMission.mesh.position.set(missionData.x, 0, missionData.z);
+        }
     }
 });
 
@@ -213,7 +223,6 @@ function animate() {
 
     const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
 
-    // Check if local player completed the mission and notify server
     if (showRescuedSurvivor && activeRaft && !activeRaft.isFullyCompleted) {
         activeRaft.fadeRaft(delta);
         if (mainBase.hasFadedOut) {

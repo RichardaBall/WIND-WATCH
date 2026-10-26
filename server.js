@@ -8,10 +8,9 @@ const io = new Server(server, {
 
 let activePlayers = {};
 
-// Shared mission state stored on the server
 let currentMission = {
-    x: (Math.random() - 0.5) * 400, // Random X position within the world
-    z: (Math.random() - 0.5) * 400, // Random Z position within the world
+    x: (Math.random() - 0.5) * 400,
+    z: (Math.random() - 0.5) * 400,
     isCompleted: false
 };
 
@@ -29,10 +28,8 @@ io.on('connection', (socket) => {
         isDroppingWater: false
     };
 
-    // Send existing players and the current shared mission to the new player
     socket.emit('current-players', activePlayers);
     socket.emit('sync-mission', currentMission);
-
     socket.broadcast.emit('player-joined', activePlayers[socket.id]);
 
     socket.on('player-update', (data) => {
@@ -56,12 +53,10 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Listen for mission completion from any player
     socket.on('complete-mission', () => {
         currentMission.isCompleted = true;
         io.emit('mission-completed');
         
-        // Generate a new mission location after a short delay
         setTimeout(() => {
             currentMission = {
                 x: (Math.random() - 0.5) * 400,
