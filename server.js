@@ -10,10 +10,10 @@ let activePlayers = {};
 
 let worldState = {
     timeOfDay: 0.25,
-    weather: 'CLEAR'
+    weather: 'CLEAR',
+    cloudSeed: 123456
 };
 
-// Single shared mission state on the server
 let currentMission = {
     type: 'LIFERAFT',
     x: (Math.random() - 0.5) * 400,
@@ -43,19 +43,7 @@ io.on('connection', (socket) => {
 
     socket.on('player-update', (data) => {
         if (activePlayers[socket.id]) {
-            activePlayers[socket.id].x = data.x;
-            activePlayers[socket.id].y = data.y;
-            activePlayers[socket.id].z = data.z;
-            activePlayers[socket.id].currentFrame = data.currentFrame;
-            activePlayers[socket.id].rotorSpeed = data.rotorSpeed;
-            activePlayers[socket.id].gearDown = data.gearDown;
-            activePlayers[socket.id].qx = data.qx;
-            activePlayers[socket.id].qy = data.qy;
-            activePlayers[socket.id].qz = data.qz;
-            activePlayers[socket.id].qw = data.qw;
-            activePlayers[socket.id].winchState = data.winchState;
-            activePlayers[socket.id].isDroppingWater = data.isDroppingWater;
-            activePlayers[socket.id].searchLightState = data.searchLightState;
+            activePlayers[socket.id] = { ...activePlayers[socket.id], ...data };
         }
         socket.broadcast.emit('remote-player-update', {
             id: socket.id,
