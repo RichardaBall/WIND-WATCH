@@ -18,20 +18,23 @@ export class CloudSystem {
         this.initClouds();
     }
 
-    // Pseudo-random generator using seed so all clients position clouds identically
     seededRandom() {
         this.seedValue = (this.seedValue * 9301 + 49297) % 233280;
         return this.seedValue / 233280;
     }
 
     initClouds() {
-        // Clear existing clouds if re-seeding
+        // Clear existing clouds
         while (this.cloudsGroup.children.length > 0) {
             this.cloudsGroup.remove(this.cloudsGroup.children[0]);
         }
         this.clouds = [];
 
-        // Temporary backup of Math.random to enforce strict determinism per seed
+        // Ensure the group is in the scene if it was somehow detached
+        if (!this.cloudsGroup.parent) {
+            this.scene.add(this.cloudsGroup);
+        }
+
         const originalRandom = Math.random;
         Math.random = () => this.seededRandom();
 
@@ -69,9 +72,8 @@ export class CloudSystem {
             this.clouds.push(cloudCluster);
         }
 
-        // Restore default Math.random
         Math.random = originalRandom;
-        console.log("☁️ Cloud system synchronized with server seed.");
+        console.log("☁️ Cloud system initialized and synced.");
     }
 
     update(delta, nightFactor, cameraQuaternion, windForce, activeWeather) {
@@ -83,13 +85,11 @@ export class CloudSystem {
             cloud.position.x += driftX;
             cloud.position.z += driftZ;
 
-            // Wrap around boundaries
             if (cloud.position.x > 1500) cloud.position.x = -1500;
             if (cloud.position.x < -1500) cloud.position.x = 1500;
             if (cloud.position.z > 1500) cloud.position.z = -1500;
             if (cloud.position.z < -1500) cloud.position.z = 1500;
 
-            // Adjust cloud color/darkness depending on weather and night factor
             const baseColor = activeWeather === 'STORM' ? 0x444444 : (activeWeather === 'RAIN' ? 0x888888 : 0xffffff);
             const r = ((baseColor >> 16) & 255) / 255 * (1.0 - nightFactor * 0.5);
             const g = ((baseColor >> 8) & 255) / 255 * (1.0 - nightFactor * 0.5);
