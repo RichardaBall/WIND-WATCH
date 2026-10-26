@@ -1,4 +1,3 @@
-// winchSystem.js
 import * as THREE from 'three';
 
 export class WinchSystem {
@@ -205,7 +204,6 @@ export class WinchSystem {
             this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
         }
 
-        // Trigger finishRetraction as soon as the cable is fully retracted and no longer visible
         if (!this.isActive && this.currentExtension < 0.01) {
             if (this.hasHookedSurvivor) {
                 this.hasHookedSurvivor = false;
@@ -287,7 +285,6 @@ export class WinchSystem {
         const startWorldPos = heliWorldPos.clone().add(new THREE.Vector3(0, this.localAnchorY, 0));
         const heliWorldY = heliWorldPos.y;
         
-        // FIX 1: Account for the helicopter's altitude so the cable fully reaches sea level (y = 0.0) when fully extended
         const distanceToSeaLevel = Math.max(0, heliWorldY - this.localAnchorY);
         const targetCableLength = distanceToSeaLevel * this.currentExtension;
 
@@ -313,11 +310,11 @@ export class WinchSystem {
                 this.hookWorldPos.y = Math.max(0.0, this.hookWorldPos.y);
             }
 
-            // FIX 2: Tightened the collision distance threshold from 4.5 to 1.8 so the hook must physically get close to the survivor
+            // Latch check: Increased distance threshold from 1.8 to 4.5 to reliably catch both variant 0 and variant 1
             if (this.isActive && this.currentExtension > 0.95 && this.liferaftMissionRef && !this.hasHookedSurvivor && !this.liferaftMissionRef.isRescued) {
                 const survivorPos = this.liferaftMissionRef.getSurvivorWorldPosition();
                 const dist = this.hookWorldPos.distanceTo(survivorPos);
-                if (dist < 1.8) {
+                if (dist < 4.5) {
                     this.hasHookedSurvivor = true;
                     this.hookedSurvivorMesh.visible = true;
                     if (this.liferaftMissionRef) {

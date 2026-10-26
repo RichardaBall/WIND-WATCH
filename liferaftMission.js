@@ -79,13 +79,15 @@ export class LiferaftMission {
         const survivorGeo = new THREE.PlaneGeometry(3, 3);
         this.survivorMesh = new THREE.Mesh(survivorGeo, this.survivorMat);
         
-        // --- Variant-specific positions ---
+        // --- Variant-specific positions using a fixed holder group ---
+        this.survivorHolder = new THREE.Group();
         if (this.variantIndex === 1) {
-            this.survivorMesh.position.set(1.95, 3.30, 0.30);
+            this.survivorHolder.position.set(1.95, 3.30, 0.30);
         } else {
-            this.survivorMesh.position.set(-1.20, 1.30, 0.30);
+            this.survivorHolder.position.set(-1.20, 1.30, 0.30);
         }
-        this.group.add(this.survivorMesh);
+        this.survivorHolder.add(this.survivorMesh);
+        this.group.add(this.survivorHolder);
 
         // --- 3. Helipad-Style Glowing Red Light Setup ---
         const lightMarkerGeo = new THREE.SphereGeometry(0.18, 16, 16);
@@ -94,16 +96,15 @@ export class LiferaftMission {
         
         this.flashingPointLight = new THREE.PointLight(0xff0033, 5.0, 12);
 
+        this.lightHolder = new THREE.Group();
         if (this.variantIndex === 1) {
-            this.flashingMarker.position.set(1.30, 5.00, 1.37);
-            this.flashingPointLight.position.set(1.30, 5.00, 1.37);
+            this.lightHolder.position.set(1.30, 5.00, 1.37);
         } else {
-            this.flashingMarker.position.set(1.593, 5.200, 1.371);
-            this.flashingPointLight.position.set(1.593, 5.200, 1.371);
+            this.lightHolder.position.set(1.593, 5.200, 1.371);
         }
-        
-        this.group.add(this.flashingMarker);
-        this.group.add(this.flashingPointLight);
+        this.lightHolder.add(this.flashingMarker);
+        this.lightHolder.add(this.flashingPointLight);
+        this.group.add(this.lightHolder);
 
         // Use custom position if provided, otherwise generate a random ocean location
         if (customPosition) {
@@ -144,7 +145,7 @@ export class LiferaftMission {
 
     getSurvivorWorldPosition() {
         const pos = new THREE.Vector3();
-        this.survivorMesh.getWorldPosition(pos);
+        this.survivorHolder.getWorldPosition(pos);
         return pos;
     }
 
