@@ -65,7 +65,7 @@ export class CloudSystem {
         this.material = new THREE.MeshStandardMaterial({
             map: texture,
             transparent: true,
-            opacity: 0.0, // Start invisible for smooth fade-in
+            opacity: this.params.opacity, // FIX: Start fully visible instead of 0.0 so they don't fade in from invisible
             depthWrite: false,
             blending: THREE.NormalBlending,
             roughness: 1.0,
@@ -104,8 +104,8 @@ export class CloudSystem {
                 (this.nextRandom() - 0.5) * 1800
             );
 
-            // Initially set scale to 0 so they can smoothly scale/pop in
-            cluster.scale.set(0, 0, 0);
+            // FIX: Initialize scale directly to 1.0 so clouds appear immediately upon sync/spawn
+            cluster.scale.set(1.0, 1.0, 1.0);
 
             this.cloudsGroup.add(cluster);
             this.clouds.push({ 
