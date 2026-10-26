@@ -122,16 +122,20 @@ socket.on('player-disconnected', (id) => {
             scene.remove(remotePlayers[id].waterSystem.splashSystem);
         }
         if (remotePlayers[id].searchLight) scene.remove(remotePlayers[id].searchLight);
+        if (remotePlayers[id].searchLightTarget) scene.remove(remotePlayers[id].searchLightTarget);
+        if (remotePlayers[id].lightPoolMesh) scene.remove(remotePlayers[id].lightPoolMesh);
         delete remotePlayers[id];
     }
 });
 
+// Forcefully sync mission position from server so both clients share the exact same objective
 socket.on('sync-mission', (missionData) => {
-    if (missionManager && missionManager.liferaftMission) {
-        if (typeof missionManager.liferaftMission.setPosition === 'function') {
-            missionManager.liferaftMission.setPosition(missionData.x, missionData.z);
-        } else if (missionManager.liferaftMission.group) {
-            missionManager.liferaftMission.group.position.set(missionData.x, 0.05, missionData.z);
+    if (missionManager) {
+        if (missionManager.currentMissionInstance && missionManager.currentMissionInstance.group) {
+            missionManager.currentMissionInstance.group.position.set(missionData.x, 0.05, missionData.z);
+            if (missionManager.navRadar) {
+                missionManager.navRadar.addOrUpdateMarker('liferaft', missionManager.currentMissionInstance.group.position, '#e74c3c', 'RAFT');
+            }
         }
     }
 });
@@ -147,11 +151,38 @@ function spawnRemotePlayer(id, data) {
     const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, { gearDown: false });
     const remoteWinchSystem = new WinchSystem(scene, remoteHeli.group, { gearDown: false });
 
-    const searchLight = new THREE.SpotLight(0xffffff, 0.0, 150, Math.PI / 6, 0.4, 1.5);
-    const searchLightTarget = new THREE.Object3D();
+    const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
+    searchLight.position.set(0, -0.5, 0);
     remoteHeli.group.add(searchLight);
+
+    const searchLightTarget = new THREE.Object3D();
     scene.add(searchLightTarget);
     searchLight.target = searchLightTarget;
+
+    const discGeo = new THREE.CircleGeometry(6.0, 32);
+    discGeo.rotateX(-Math.PI / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+    gradient.addColorStop(0.6, 'rgba(230, 240, 255, 0.7)');
+    gradient.addColorStop(1, 'rgba(200, 220, 255, 0)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 128, 128);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const discMat = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        opacity: 0.0
+    });
+    const lightPoolMesh = new THREE.Mesh(discGeo, discMat);
+    lightPoolMesh.position.set(0, 0.05, 0);
+    scene.add(lightPoolMesh);
 
     remotePlayers[id] = {
         group: remoteHeli.group,
@@ -160,6 +191,7 @@ function spawnRemotePlayer(id, data) {
         winchSystem: remoteWinchSystem,
         searchLight: searchLight,
         searchLightTarget: searchLightTarget,
+        lightPoolMesh: lightPoolMesh,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
@@ -257,9 +289,16 @@ function animate() {
         }
 
         if (rp.searchLight) {
-            rp.searchLight.intensity = (rp.searchLightState !== 'OFF') ? (nightFactor * 65.0) : 0.0;
-            const pos = rp.group.position;
-            rp.searchLightTarget.position.set(pos.x, 0, pos.z + 15);
+            if (rp.searchLightState !== 'OFF') {
+                rp.searchLight.intensity = nightFactor * 90.0;
+                rp.lightPoolMesh.material.opacity = nightFactor * 0.9;
+                const pos = rp.group.position;
+                rp.searchLightTarget.position.set(pos.x, 0.0, pos.z + 15.0);
+                rp.lightPoolMesh.position.set(pos.x, 0.05, pos.z + 15.0);
+            } else {
+                rp.searchLight.intensity = 0.0;
+                rp.lightPoolMesh.material.opacity = 0.0;
+            }
         }
     }
 

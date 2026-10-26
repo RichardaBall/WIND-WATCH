@@ -13,6 +13,7 @@ let worldState = {
     weather: 'CLEAR'
 };
 
+// Single shared mission state on the server
 let currentMission = {
     type: 'LIFERAFT',
     x: (Math.random() - 0.5) * 400,
