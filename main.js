@@ -136,6 +136,9 @@ socket.on('player-disconnected', (id) => {
 });
 
 socket.on('sync-mission', (missionData) => {
+    if (mainBase && typeof mainBase.resetFade === 'function') {
+        mainBase.resetFade();
+    }
     if (missionManager) {
         if (typeof missionManager.spawnSpecificMission === 'function') {
             missionManager.spawnSpecificMission(missionData.type, missionData);
@@ -149,6 +152,9 @@ socket.on('sync-mission', (missionData) => {
 });
 
 socket.on('mission-completed', () => {
+    if (mainBase && typeof mainBase.resetFade === 'function') {
+        mainBase.resetFade();
+    }
     if (missionManager && missionManager.liferaftMission) {
         missionManager.liferaftMission.isFullyCompleted = true;
     }

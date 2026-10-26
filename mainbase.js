@@ -160,6 +160,15 @@ export class MainBase {
         this.buildLightGroup('white', 0xffffff);
     }
 
+    resetFade() {
+        this.fadeTimer = 0;
+        this.hasFadedOut = false;
+        if (this.rescuedSurvivorMesh) {
+            this.rescuedSurvivorMesh.visible = false;
+            this.rescuedSurvivorMat.opacity = 1.0;
+        }
+    }
+
     buildLightGroup(category, colorHex) {
         this.lightConfigs[category].forEach((pos, idx) => {
             const markerGeo = new THREE.SphereGeometry(1, 16, 16);
