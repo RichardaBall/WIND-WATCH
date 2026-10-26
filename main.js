@@ -137,7 +137,9 @@ socket.on('player-disconnected', (id) => {
 
 socket.on('sync-mission', (missionData) => {
     if (missionManager) {
-        if (missionManager.currentMissionInstance && missionManager.currentMissionInstance.group) {
+        if (typeof missionManager.spawnSpecificMission === 'function') {
+            missionManager.spawnSpecificMission(missionData.type, missionData);
+        } else if (missionManager.currentMissionInstance && missionManager.currentMissionInstance.group) {
             missionManager.currentMissionInstance.group.position.set(missionData.x, 0.05, missionData.z);
             if (missionManager.navRadar) {
                 missionManager.navRadar.addOrUpdateMarker('liferaft', missionManager.currentMissionInstance.group.position, '#e74c3c', 'RAFT');
