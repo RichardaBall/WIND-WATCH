@@ -11,7 +11,7 @@ let activePlayers = {};
 let worldState = {
     timeOfDay: 0.25,
     weather: 'CLEAR',
-    cloudSeed: Math.floor(Math.random() * 1000000)
+    cloudSeed: 123456
 };
 
 // Periodic random weather rotation on the server
@@ -23,7 +23,7 @@ setInterval(() => {
         console.log(`☁️ Server changed global weather to: ${worldState.weather}`);
         io.emit('sync-world', worldState);
     }
-}, 60000); // Rotates every 60 seconds
+}, 45000); // Rotates every 45 seconds
 
 function generateRandomMission() {
     const types = ['LIFERAFT', 'WTG_FIRE'];

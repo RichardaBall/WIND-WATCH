@@ -50,7 +50,6 @@ const settings = setupSettings(dayNightCycle, player, weatherSystem, missionMana
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 const remotePlayers = {};
-let isCloudSeeded = false;
 
 socket.on('current-players', (players) => {
     for (const id in players) {
@@ -71,11 +70,8 @@ socket.on('sync-world', (worldData) => {
     if (worldData.weather !== undefined && weatherSystem) {
         weatherSystem.setWeather(worldData.weather);
     }
-    if (worldData.cloudSeed !== undefined && cloudSystem && !isCloudSeeded) {
-        isCloudSeeded = true;
-        if (typeof cloudSystem.setSeed === 'function') {
-            cloudSystem.setSeed(worldData.cloudSeed);
-        }
+    if (worldData.cloudSeed !== undefined && cloudSystem) {
+        cloudSystem.setSeed(worldData.cloudSeed);
     }
 });
 
