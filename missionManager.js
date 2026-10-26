@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { LiferaftMission } from './liferaftMission.js';
 
 export class MissionManager {
-    constructor(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem) {
+    constructor(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem, socket = null) {
         this.scene = scene;
         this.navRadar = navRadar;
         this.windFarm = windFarm;
@@ -10,22 +10,24 @@ export class MissionManager {
         this.player = player;
         this.camera = camera;
         this.searchLightSystem = searchLightSystem;
+        this.socket = socket;
 
-        this.missionState = 'READY'; // READY, ACTIVE
+        this.missionState = 'READY'; // READY, ACTIVE, COMPLETED
         this.currentMissionKey = null;
         this.currentMissionInstance = null;
         this.lastMissionKey = null;
 
         // Registry mapping mission keys to factory functions that instantiate mission objects
         this.availableMissions = {
-            'LIFERAFT': () => {
-                const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem);
+            'LIFERAFT': (missionData) => {
+                const pos = missionData && missionData.x !== undefined ? new THREE.Vector3(missionData.x, 0.05, missionData.z) : null;
+                const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem, pos);
                 if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
                     this.helicopterSystems.tools['WINCH'].setLiferaftMission(mission);
                 }
                 return mission;
             },
-            'WTG_FIRE': () => this.createWtgFireMission()
+            'WTG_FIRE': (missionData) => this.createWtgFireMission(missionData)
         };
 
         this.registerPermanentLandmarks();
@@ -49,15 +51,15 @@ export class MissionManager {
         return center;
     }
 
-    createWtgFireMission() {
+    createWtgFireMission(missionData) {
         if (!this.windFarm || this.windFarm.turbines.length === 0) return null;
 
-        const turbineIndex = Math.floor(Math.random() * this.windFarm.turbines.length);
+        const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : Math.floor(Math.random() * this.windFarm.turbines.length);
         this.windFarm.setTurbineFire(turbineIndex, true);
         
-        const centerPos = this.getWindFarmCenter();
-        this.navRadar.addOrUpdateMarker('wind_farm', centerPos, '#e74c3c', 'FIRE!');
-        console.log(`🔥 Active Mission Spawned: WTG Fire on turbine index ${turbineIndex}!`);
+        const turbineWorldPos = this.windFarm.getTurbineWorldPosition(turbineIndex);
+        this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
+        console.log(`🔥 Active Server Mission Spawned: WTG Fire on turbine index ${turbineIndex}!`);
 
         let extinguishProgress = 0;
 
@@ -76,6 +78,7 @@ export class MissionManager {
                     extinguishProgress += delta;
                     if (extinguishProgress >= 2.0) {
                         this.windFarm.setTurbineFire(turbineIndex, false);
+                        return true;
                     }
                 } else {
                     extinguishProgress = Math.max(0, extinguishProgress - delta * 1.5);
@@ -90,12 +93,10 @@ export class MissionManager {
     }
 
     clearAllMissions() {
-        // Clear active mission via interface cleanup method
         if (this.currentMissionInstance && typeof this.currentMissionInstance.cleanup === 'function') {
             this.currentMissionInstance.cleanup();
         }
 
-        // Fallback safety clearing for legacy wind farm markers/fires
         if (this.windFarm && this.windFarm.turbines) {
             for (let i = 0; i < this.windFarm.turbines.length; i++) {
                 this.windFarm.setTurbineFire(i, false);
@@ -112,53 +113,26 @@ export class MissionManager {
         this.currentMissionKey = null;
     }
 
-    spawnRandomMission() {
-        this.clearAllMissions();
-
-        const missionKeys = Object.keys(this.availableMissions);
-        
-        // Filter out the last completed mission to prevent repeating the same mission type twice in a row
-        let availableKeys = missionKeys;
-        if (this.lastMissionKey && missionKeys.length > 1) {
-            availableKeys = missionKeys.filter(key => key !== this.lastMissionKey);
-        }
-
-        const chosenKey = availableKeys[Math.floor(Math.random() * availableKeys.length)];
-
-        this.currentMissionKey = chosenKey;
-        this.missionState = 'ACTIVE';
-        this.currentMissionInstance = this.availableMissions[chosenKey]();
-
-        console.log(`🚀 Active Mission Started: [${chosenKey}]`);
-    }
-
     spawnSpecificMission(type, missionData) {
         this.clearAllMissions();
         this.currentMissionKey = type;
         this.missionState = 'ACTIVE';
 
-        if (type === 'LIFERAFT') {
-            const pos = new THREE.Vector3(missionData.x, 0.05, missionData.z);
-            const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem, pos);
-            if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
-                this.helicopterSystems.tools['WINCH'].setLiferaftMission(mission);
-            }
-            this.currentMissionInstance = mission;
-        } else if (this.availableMissions[type]) {
-            this.currentMissionInstance = this.availableMissions[type]();
+        if (this.availableMissions[type]) {
+            this.currentMissionInstance = this.availableMissions[type](missionData);
         }
-        console.log(`🚀 Synced Mission Spawned: [${type}] at x=${missionData.x.toFixed(0)}, z=${missionData.z.toFixed(0)}`);
+        console.log(`🚀 Synced Server-Authoritative Mission Spawned: [${type}]`);
     }
 
     completeActiveMission() {
         console.log("🧪 Test Trigger: Forcibly completing current mission...");
-        if (this.currentMissionKey) {
-            this.lastMissionKey = this.currentMissionKey;
+        if (this.socket) {
+            this.socket.emit('complete-mission');
+        } else {
+            this.clearAllMissions();
         }
-        this.clearAllMissions();
     }
 
-    // Getter for main.js base landing logic check
     get liferaftMission() {
         return this.currentMissionKey === 'LIFERAFT' ? this.currentMissionInstance : null;
     }
@@ -166,7 +140,7 @@ export class MissionManager {
     update(delta, playerPosition, nightFactor) {
         if (!this.windFarm || !this.helicopterSystems) return;
 
-        // Universal Main Base Restocking Logic (keeps fuel/water topped up when landed at base)
+        // Universal Main Base Restocking Logic
         const distToBase = playerPosition.distanceTo(new THREE.Vector3(0, 0, 0));
         const player = this.helicopterSystems.playerRef;
         const isNearBase = distToBase < 25.0;
@@ -209,12 +183,15 @@ export class MissionManager {
                 isComplete = this.currentMissionInstance.update(delta, playerPosition, nightFactor);
             }
 
-            if (isComplete) {
+            if (isComplete && this.missionState === 'ACTIVE') {
+                this.missionState = 'COMPLETED';
                 this.lastMissionKey = this.currentMissionKey;
-                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Waiting for server sync...`);
-                this.currentMissionInstance = null;
-                this.currentMissionKey = null;
-                this.missionState = 'READY';
+                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Sending validation request to server...`);
+                if (this.socket) {
+                    this.socket.emit('complete-mission');
+                } else {
+                    this.clearAllMissions();
+                }
             }
         }
     }

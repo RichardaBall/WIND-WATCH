@@ -14,12 +14,26 @@ let worldState = {
     cloudSeed: 123456
 };
 
-let currentMission = {
-    type: 'LIFERAFT',
-    x: (Math.random() - 0.5) * 400,
-    z: (Math.random() - 0.5) * 400,
-    isCompleted: false
-};
+function generateRandomMission() {
+    const types = ['LIFERAFT', 'WTG_FIRE'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    if (type === 'LIFERAFT') {
+        return {
+            type: 'LIFERAFT',
+            x: (Math.random() - 0.5) * 400,
+            z: (Math.random() - 0.5) * 400,
+            isCompleted: false
+        };
+    } else {
+        return {
+            type: 'WTG_FIRE',
+            turbineIndex: Math.floor(Math.random() * 5),
+            isCompleted: false
+        };
+    }
+}
+
+let currentMission = generateRandomMission();
 
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
@@ -59,16 +73,16 @@ io.on('connection', (socket) => {
 
     socket.on('complete-mission', () => {
         if (currentMission.isCompleted) return;
+        
+        const player = activePlayers[socket.id];
+        if (!player) return;
+
         currentMission.isCompleted = true;
-        io.emit('mission-completed');
+        io.emit('mission-completed', currentMission);
+        console.log(`🏆 Mission [${currentMission.type}] completed by player ${socket.id}. Spawning next mission...`);
         
         setTimeout(() => {
-            currentMission = {
-                type: 'LIFERAFT',
-                x: (Math.random() - 0.5) * 400,
-                z: (Math.random() - 0.5) * 400,
-                isCompleted: false
-            };
+            currentMission = generateRandomMission();
             io.emit('sync-mission', currentMission);
         }, 3000);
     });

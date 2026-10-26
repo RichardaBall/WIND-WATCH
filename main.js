@@ -1,4 +1,3 @@
-// main.js
 import * as THREE from 'three';
 import { io } from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.esm.min.js';
 import { setupScene } from './sceneSetup.js';
@@ -42,7 +41,7 @@ const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
 
 const collisionManager = new CollisionManager(scene, player, windFarm);
-const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem);
+const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem, socket);
 const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
 const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem);
@@ -140,14 +139,7 @@ socket.on('sync-mission', (missionData) => {
         mainBase.resetFade();
     }
     if (missionManager) {
-        if (typeof missionManager.spawnSpecificMission === 'function') {
-            missionManager.spawnSpecificMission(missionData.type, missionData);
-        } else if (missionManager.currentMissionInstance && missionManager.currentMissionInstance.group) {
-            missionManager.currentMissionInstance.group.position.set(missionData.x, 0.05, missionData.z);
-            if (missionManager.navRadar) {
-                missionManager.navRadar.addOrUpdateMarker('liferaft', missionManager.currentMissionInstance.group.position, '#e74c3c', 'RAFT');
-            }
-        }
+        missionManager.spawnSpecificMission(missionData.type, missionData);
     }
 });
 
@@ -157,6 +149,9 @@ socket.on('mission-completed', () => {
     }
     if (missionManager && missionManager.liferaftMission) {
         missionManager.liferaftMission.isFullyCompleted = true;
+    }
+    if (missionManager) {
+        missionManager.clearAllMissions();
     }
 });
 
