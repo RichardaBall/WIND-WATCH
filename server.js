@@ -11,8 +11,19 @@ let activePlayers = {};
 let worldState = {
     timeOfDay: 0.25,
     weather: 'CLEAR',
-    cloudSeed: 123456
+    cloudSeed: Math.floor(Math.random() * 1000000)
 };
+
+// Periodic random weather rotation on the server
+const weatherTypes = ['CLEAR', 'RAIN', 'STORM', 'SNOW'];
+setInterval(() => {
+    const randomWeather = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
+    if (worldState.weather !== randomWeather) {
+        worldState.weather = randomWeather;
+        console.log(`☁️ Server changed global weather to: ${worldState.weather}`);
+        io.emit('sync-world', worldState);
+    }
+}, 60000); // Rotates every 60 seconds
 
 function generateRandomMission() {
     const types = ['LIFERAFT', 'WTG_FIRE'];
@@ -66,12 +77,6 @@ io.on('connection', (socket) => {
             id: socket.id,
             ...data
         });
-    });
-
-    socket.on('world-update', (data) => {
-        if (data.timeOfDay !== undefined) worldState.timeOfDay = data.timeOfDay;
-        if (data.weather !== undefined) worldState.weather = data.weather;
-        socket.broadcast.emit('sync-world', worldState);
     });
 
     socket.on('survivor-hooked', () => {

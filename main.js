@@ -269,11 +269,6 @@ function animate() {
             isDroppingWater: helicopterSystems.isWaterActive(),
             searchLightState: searchLightSystem.state
         });
-
-        socket.emit('world-update', {
-            timeOfDay: dayNightCycle.timeOfDay,
-            weather: weatherSystem.targetWeather
-        });
     }
 
     for (const id in remotePlayers) {

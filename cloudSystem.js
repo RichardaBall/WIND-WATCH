@@ -1,177 +1,103 @@
-// cloudSystem.js
 import * as THREE from 'three';
 
 export class CloudSystem {
     constructor(scene) {
         this.scene = scene;
-        this.cloudGroup = new THREE.Group();
-        this.scene.add(this.cloudGroup);
+        this.cloudsGroup = new THREE.Group();
+        this.scene.add(this.cloudsGroup);
 
-        this.currentWeatherState = 'CLEAR';
-        
-        this.params = {
-            maxCount: 135,        // Maximum pool size for worst-case storm weather
-            baseCount: 100,       // Normal clear weather count
-            altitudeLow: 14,
-            altitudeHigh: 45,
-            size: 35.0,
-            opacity: 0.65,
-            speed: 5.0
-        };
+        this.cloudCount = 35;
+        this.clouds = [];
+        this.seedValue = 123456;
 
-        this.currentTint = 1.0;
-        this.targetTint = 1.0;
-        this.currentOpacity = this.params.opacity;
-        this.targetOpacity = this.params.opacity;
-        
-        this.targetActiveCount = this.params.baseCount;
-        this.currentActiveCount = this.params.baseCount;
-
-        this.buildCloudPool();
+        this.initClouds();
     }
 
-    buildCloudPool() {
-        // Create canvas texture once
-        const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-        gradient.addColorStop(0.4, 'rgba(240, 245, 255, 0.4)');
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 128, 128);
+    setSeed(seed) {
+        this.seedValue = seed;
+        this.initClouds();
+    }
 
-        const texture = new THREE.CanvasTexture(canvas);
-        this.material = new THREE.MeshStandardMaterial({
-            map: texture,
-            transparent: true,
-            opacity: 0.0, // Start invisible for smooth fade-in
-            depthWrite: false,
-            blending: THREE.NormalBlending,
-            roughness: 1.0,
-            side: THREE.DoubleSide
-        });
+    // Pseudo-random generator using seed so all clients position clouds identically
+    seededRandom() {
+        this.seedValue = (this.seedValue * 9301 + 49297) % 233280;
+        return this.seedValue / 233280;
+    }
 
-        const puffGeo = new THREE.PlaneGeometry(this.params.size, this.params.size * 0.5);
+    initClouds() {
+        // Clear existing clouds if re-seeding
+        while (this.cloudsGroup.children.length > 0) {
+            this.cloudsGroup.remove(this.cloudsGroup.children[0]);
+        }
         this.clouds = [];
 
-        // Pre-spawn maximum pool of clouds
-        for (let i = 0; i < this.params.maxCount; i++) {
-            const cluster = new THREE.Group();
-            const puffCount = 4 + Math.floor(Math.random() * 3);
+        // Temporary backup of Math.random to enforce strict determinism per seed
+        const originalRandom = Math.random;
+        Math.random = () => this.seededRandom();
+
+        const cloudGeo = new THREE.DodecahedronGeometry(35, 1);
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.9,
+            metalness: 0.1,
+            transparent: true,
+            opacity: 0.85
+        });
+
+        for (let i = 0; i < this.cloudCount; i++) {
+            const cloudCluster = new THREE.Group();
+            const puffCount = 4 + Math.floor(Math.random() * 5);
 
             for (let p = 0; p < puffCount; p++) {
-                const mesh = new THREE.Mesh(puffGeo, this.material);
+                const mesh = new THREE.Mesh(cloudGeo, cloudMat);
                 mesh.position.set(
-                    (Math.random() - 0.5) * (this.params.size * 0.8),
-                    (Math.random() - 0.5) * 6,
-                    (Math.random() - 0.5) * (this.params.size * 0.8)
+                    (Math.random() - 0.5) * 60,
+                    (Math.random() - 0.5) * 15,
+                    (Math.random() - 0.5) * 60
                 );
-                mesh.rotation.z = (Math.random() - 0.5) * 0.5;
-                
-                const scaleVariation = 0.7 + Math.random() * 0.6;
-                mesh.scale.set(scaleVariation, scaleVariation * (0.8 + Math.random() * 0.4), 1.0);
-
-                cluster.add(mesh);
+                const scale = 0.6 + Math.random() * 0.8;
+                mesh.scale.set(scale, scale * 0.6, scale);
+                cloudCluster.add(mesh);
             }
 
-            const isLower = Math.random() < 0.45;
-            const posY = isLower ? (this.params.altitudeLow + Math.random() * 8) : (this.params.altitudeHigh + Math.random() * 15);
+            const x = (Math.random() - 0.5) * 2500;
+            const y = 180 + Math.random() * 80;
+            const z = (Math.random() - 0.5) * 2500;
 
-            cluster.position.set(
-                (Math.random() - 0.5) * 1800,
-                posY,
-                (Math.random() - 0.5) * 1800
-            );
-
-            // Initially set scale to 0 so they can smoothly scale/pop in
-            cluster.scale.set(0, 0, 0);
-
-            this.cloudGroup.add(cluster);
-            this.clouds.push({ 
-                mesh: cluster, 
-                speedX: this.params.speed + Math.random() * 3,
-                pulseOffset: Math.random() * Math.PI * 2,
-                isActive: false
-            });
+            cloudCluster.position.set(x, y, z);
+            this.cloudsGroup.add(cloudCluster);
+            this.clouds.push(cloudCluster);
         }
+
+        // Restore default Math.random
+        Math.random = originalRandom;
+        console.log("☁️ Cloud system synchronized with server seed.");
     }
 
-    update(delta, nightFactor, cameraQuaternion, windForce, weatherType = 'CLEAR') {
-        if (this.currentWeatherState !== weatherType) {
-            this.currentWeatherState = weatherType;
+    update(delta, nightFactor, cameraQuaternion, windForce, activeWeather) {
+        const driftSpeed = 4.0;
+        const driftX = windForce.x * driftSpeed * delta;
+        const driftZ = windForce.z * driftSpeed * delta;
 
-            // Set targets based on weather without destroying any geometry
-            if (weatherType === 'STORM') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.8);
-                this.targetTint = 0.35;
-                this.targetOpacity = 0.9;
-            } else if (weatherType === 'RAIN' || weatherType === 'SNOW') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.4);
-                this.targetTint = 0.6;
-                this.targetOpacity = 0.82;
-            } else if (weatherType === 'FOG' || weatherType === 'RAIN_FOG' || weatherType === 'SNOW_FOG') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.3);
-                this.targetTint = 0.8;
-                this.targetOpacity = 0.88;
-            } else {
-                this.targetActiveCount = this.params.baseCount;
-                this.targetTint = 1.0;
-                this.targetOpacity = this.params.opacity;
-            }
-        }
+        for (const cloud of this.clouds) {
+            cloud.position.x += driftX;
+            cloud.position.z += driftZ;
 
-        // Smoothly transition active cloud counts
-        this.currentActiveCount = THREE.MathUtils.lerp(this.currentActiveCount, this.targetActiveCount, delta * 2.0);
+            // Wrap around boundaries
+            if (cloud.position.x > 1500) cloud.position.x = -1500;
+            if (cloud.position.x < -1500) cloud.position.x = 1500;
+            if (cloud.position.z > 1500) cloud.position.z = -1500;
+            if (cloud.position.z < -1500) cloud.position.z = 1500;
 
-        // Smooth opacity and tint transitions
-        if (this.material && this.material.opacity !== undefined) {
-            this.currentOpacity = THREE.MathUtils.lerp(this.currentOpacity, this.targetOpacity, delta * 2.0);
-            this.material.opacity = this.currentOpacity;
-        }
+            // Adjust cloud color/darkness depending on weather and night factor
+            const baseColor = activeWeather === 'STORM' ? 0x444444 : (activeWeather === 'RAIN' ? 0x888888 : 0xffffff);
+            const r = ((baseColor >> 16) & 255) / 255 * (1.0 - nightFactor * 0.5);
+            const g = ((baseColor >> 8) & 255) / 255 * (1.0 - nightFactor * 0.5);
+            const b = (baseColor & 255) / 255 * (1.0 - nightFactor * 0.5);
 
-        let speedMultiplier = 1.0;
-        if (weatherType === 'STORM') speedMultiplier = 2.6;
-        else if (weatherType === 'RAIN' || weatherType === 'RAIN_FOG') speedMultiplier = 1.6;
-        else if (weatherType === 'FOG') speedMultiplier = 0.5;
-
-        const elapsedTime = Date.now() * 0.001;
-
-        // Update each cloud in the pool smoothly
-        for (let i = 0; i < this.clouds.length; i++) {
-            const cloud = this.clouds[i];
-            const shouldBeActive = i < Math.round(this.currentActiveCount);
-
-            // Smoothly scale clouds in or out based on whether they should be active
-            const targetClusterScale = shouldBeActive ? 1.0 : 0.0;
-            cloud.mesh.scale.x = THREE.MathUtils.lerp(cloud.mesh.scale.x, targetClusterScale, delta * 3.0);
-            cloud.mesh.scale.y = THREE.MathUtils.lerp(cloud.mesh.scale.y, targetClusterScale, delta * 3.0);
-            cloud.mesh.scale.z = THREE.MathUtils.lerp(cloud.mesh.scale.z, targetClusterScale, delta * 3.0);
-
-            if (cloud.mesh.scale.x > 0.05) {
-                const wx = windForce ? windForce.x * 0.5 : 0;
-                cloud.mesh.position.x += (cloud.speedX * speedMultiplier + wx) * delta;
-
-                if (cloud.mesh.position.x > 900) {
-                    cloud.mesh.position.x = -900;
-                }
-
-                // Subtle organic pulsing
-                const pulse = 1.0 + Math.sin(elapsedTime * 1.5 + cloud.pulseOffset) * 0.03;
-                
-                if (cameraQuaternion) {
-                    cloud.mesh.quaternion.copy(cameraQuaternion);
-                }
-            }
-        }
-
-        const baseTint = 1.0 - (nightFactor * 0.75);
-        this.currentTint = THREE.MathUtils.lerp(this.currentTint, baseTint * this.targetTint, delta * 2.0);
-        
-        if (this.material) {
-            this.material.color.setRGB(this.currentTint, this.currentTint, this.currentTint);
+            cloud.children.forEach(puff => {
+                puff.material.color.setRGB(r, g, b);
+            });
         }
     }
 }
