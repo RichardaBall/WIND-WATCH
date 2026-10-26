@@ -17,6 +17,7 @@ import { CollisionManager } from './collisionManager.js';
 import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
 import { CloudSystem } from './cloudSystem.js';
+import { WaterSystem } from './waterSystem.js';
 
 // Connect to your online cloud server
 const socket = io('https://wind-watch-server.onrender.com');
@@ -87,6 +88,14 @@ socket.on('remote-player-update', (data) => {
                 rp.helicopter.updateGearVisuals(data.gearDown);
             }
         }
+
+        if (rp.waterSystem) {
+            if (data.isDroppingWater && !rp.waterSystem.isActive) {
+                rp.waterSystem.start();
+            } else if (!data.isDroppingWater && rp.waterSystem.isActive) {
+                rp.waterSystem.stop();
+            }
+        }
     }
 });
 
@@ -94,7 +103,10 @@ socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
         if (remotePlayers[id].winchLine) scene.remove(remotePlayers[id].winchLine);
-        if (remotePlayers[id].waterStream) scene.remove(remotePlayers[id].waterStream);
+        if (remotePlayers[id].waterSystem && remotePlayers[id].waterSystem.particleSystem) {
+            scene.remove(remotePlayers[id].waterSystem.particleSystem);
+            scene.remove(remotePlayers[id].waterSystem.splashSystem);
+        }
         if (remotePlayers[id].searchLight) scene.remove(remotePlayers[id].searchLight);
         delete remotePlayers[id];
     }
@@ -132,14 +144,8 @@ function spawnRemotePlayer(id, data) {
     winchLine.visible = false;
     scene.add(winchLine);
 
-    // Water spray stream particles for remote player
-    const waterGeo = new THREE.BufferGeometry();
-    const waterPositions = new Float32Array(300 * 3);
-    waterGeo.setAttribute('position', new THREE.BufferAttribute(waterPositions, 3));
-    const waterMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 6.0, transparent: true, opacity: 0.6, depthWrite: false });
-    const waterStream = new THREE.Points(waterGeo, waterMat);
-    waterStream.visible = false;
-    scene.add(waterStream);
+    // Identical WaterSystem instance for remote player
+    const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, { gearDown: false });
 
     // Searchlight for remote player
     const searchLight = new THREE.SpotLight(0xffffff, 0.0, 150, Math.PI / 6, 0.4, 1.5);
@@ -152,7 +158,7 @@ function spawnRemotePlayer(id, data) {
         group: remoteHeli.group,
         helicopter: remoteHeli,
         winchLine: winchLine,
-        waterStream: waterStream,
+        waterSystem: remoteWaterSystem,
         searchLight: searchLight,
         searchLightTarget: searchLightTarget,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
@@ -248,21 +254,9 @@ function animate() {
             }
         }
 
-        // Update remote water spray particles
-        if (rp.waterStream) {
-            if (rp.isDroppingWater) {
-                rp.waterStream.visible = true;
-                const pos = rp.group.position;
-                const positions = rp.waterStream.geometry.attributes.position.array;
-                for (let i = 0; i < 300; i++) {
-                    positions[i * 3] = pos.x + (Math.random() - 0.5) * 2;
-                    positions[i * 3 + 1] = pos.y - 2 - (i * 0.1);
-                    positions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 2;
-                }
-                rp.waterStream.geometry.attributes.position.needsUpdate = true;
-            } else {
-                rp.waterStream.visible = false;
-            }
+        // Update remote water system simulation
+        if (rp.waterSystem) {
+            rp.waterSystem.update(delta);
         }
 
         // Update remote searchlight
