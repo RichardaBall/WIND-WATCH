@@ -86,6 +86,9 @@ socket.on('remote-player-update', (data) => {
 socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
+        if (remotePlayers[id].winchLine) {
+            scene.remove(remotePlayers[id].winchLine);
+        }
         delete remotePlayers[id];
     }
 });
@@ -108,9 +111,21 @@ socket.on('mission-completed', () => {
 
 function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
+    
+    // Create a visual winch line for remote player
+    const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -20, 0)
+    ]);
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa, linewidth: 2 });
+    const winchLine = new THREE.Line(lineGeometry, lineMaterial);
+    winchLine.visible = false;
+    scene.add(winchLine);
+
     remotePlayers[id] = {
         group: remoteHeli.group,
         helicopter: remoteHeli,
+        winchLine: winchLine,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
@@ -163,11 +178,12 @@ function animate() {
             qy: player.mesh.quaternion.y,
             qz: player.mesh.quaternion.z,
             qw: player.mesh.quaternion.w,
-            winchState: player.winchState,
+            winchState: helicopterSystems.tools['WINCH'] ? helicopterSystems.tools['WINCH'].state : 'STOWED',
             isDroppingWater: helicopterSystems.isDroppingWater || false
         });
     }
 
+    // Smoothly update remote players' positions, rotations, gear, rotors, and tool visuals
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
@@ -184,6 +200,24 @@ function animate() {
             rp.helicopter.material.map.offset.x = frameOffset;
             if (rp.helicopter.material.emissiveMap) {
                 rp.helicopter.material.emissiveMap.offset.x = frameOffset;
+            }
+        }
+
+        // Update remote winch line visual
+        if (rp.winchLine) {
+            if (rp.winchState && rp.winchState !== 'STOWED') {
+                rp.winchLine.visible = true;
+                const heliPos = rp.group.position;
+                const positions = rp.winchLine.geometry.attributes.position.array;
+                positions[0] = heliPos.x;
+                positions[1] = heliPos.y;
+                positions[2] = heliPos.z;
+                positions[3] = heliPos.x;
+                positions[4] = Math.max(0, heliPos.y - 15);
+                positions[5] = heliPos.z;
+                rp.winchLine.geometry.attributes.position.needsUpdate = true;
+            } else {
+                rp.winchLine.visible = false;
             }
         }
     }
