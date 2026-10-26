@@ -1,6 +1,6 @@
 // main.js
 import * as THREE from 'three';
-import { io } from 'socket.io-client';
+import { io } from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.esm.min.js';
 import { setupScene } from './sceneSetup.js';
 import { OceanWater } from './ocean.js';
 import { MainBase } from './mainbase.js';
