@@ -62,13 +62,13 @@ export class CloudSystem {
         ctx.fillRect(0, 0, 128, 128);
 
         const texture = new THREE.CanvasTexture(canvas);
-        this.material = new THREE.MeshStandardMaterial({
+        // FIX: Use MeshBasicMaterial so clouds don't turn pitch black or vanish under changing scene lighting
+        this.material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
-            opacity: this.params.opacity, // FIX: Start fully visible instead of 0.0 so they don't fade in from invisible
+            opacity: this.params.opacity,
             depthWrite: false,
             blending: THREE.NormalBlending,
-            roughness: 1.0,
             side: THREE.DoubleSide
         });
 
@@ -104,7 +104,7 @@ export class CloudSystem {
                 (this.nextRandom() - 0.5) * 1800
             );
 
-            // FIX: Initialize scale directly to 1.0 so clouds appear immediately upon sync/spawn
+            // Initialize scale directly to 1.0 so clouds appear immediately upon sync/spawn
             cluster.scale.set(1.0, 1.0, 1.0);
 
             this.cloudsGroup.add(cluster);
@@ -128,15 +128,15 @@ export class CloudSystem {
             // Set targets based on weather without destroying any geometry
             if (weatherType === 'STORM') {
                 this.targetActiveCount = Math.round(this.params.baseCount * 1.8);
-                this.targetTint = 0.35;
+                this.targetTint = 0.45;
                 this.targetOpacity = 0.9;
             } else if (weatherType === 'RAIN' || weatherType === 'SNOW') {
                 this.targetActiveCount = Math.round(this.params.baseCount * 1.4);
-                this.targetTint = 0.6;
+                this.targetTint = 0.7;
                 this.targetOpacity = 0.82;
             } else if (weatherType === 'FOG' || weatherType === 'RAIN_FOG' || weatherType === 'SNOW_FOG') {
                 this.targetActiveCount = Math.round(this.params.baseCount * 1.3);
-                this.targetTint = 0.8;
+                this.targetTint = 0.85;
                 this.targetOpacity = 0.88;
             } else {
                 this.targetActiveCount = this.params.baseCount;
@@ -189,7 +189,8 @@ export class CloudSystem {
             }
         }
 
-        const baseTint = 1.0 - (nightFactor * 0.75);
+        // FIX: Prevent clouds from disappearing into complete blackness at night
+        const baseTint = 1.0 - (nightFactor * 0.5);
         this.currentTint = THREE.MathUtils.lerp(this.currentTint, baseTint * this.targetTint, delta * 2.0);
         
         if (this.material) {
