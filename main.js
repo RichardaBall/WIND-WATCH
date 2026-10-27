@@ -371,4 +371,26 @@ window.addEventListener('start-loading-game', () => {
     const loadingScreen = document.getElementById('loading-screen');
     const copyrightNotice = document.getElementById('copyright-notice');
 
-    let progress =
+    let progress = 0;
+    const interval = setInterval(() => {
+        progress += 20;
+        if (progress > 100) progress = 100;
+        if (progressBar) progressBar.style.width = `${progress}%`;
+        if (loadingStatus) loadingStatus.innerText = `Loading assets (${progress}%)...`;
+
+        if (progress >= 100) {
+            clearInterval(interval);
+            if (loadingStatus) loadingStatus.innerText = 'Ready! Launching flight...';
+            setTimeout(() => {
+                if (loadingScreen) {
+                    loadingScreen.style.opacity = '0';
+                    if (copyrightNotice) copyrightNotice.style.opacity = '0';
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                        if (copyrightNotice) copyrightNotice.style.display = 'none';
+                    }, 600);
+                }
+            }, 300);
+        }
+    }, 100);
+});
