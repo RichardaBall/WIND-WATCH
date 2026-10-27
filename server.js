@@ -61,7 +61,8 @@ io.on('connection', (socket) => {
         qx: 0, qy: 0, qz: 0, qw: 1,
         winchState: 'STOWED',
         isDroppingWater: false,
-        searchLightState: 'OFF'
+        searchLightState: 'OFF',
+        slX: 0, slY: 0, slZ: 0
     };
 
     socket.emit('current-players', activePlayers);
@@ -82,7 +83,7 @@ io.on('connection', (socket) => {
     socket.on('survivor-hooked', () => {
         if (currentMission.isRescued || currentMission.isCompleted) return;
         currentMission.isRescued = true;
-        io.emit('survivor-rescued');
+        io.emit('surviv0r-rescued');
         console.log(`🛟 Survivor hooked by player ${socket.id}. Removing from all clients...`);
     });
 

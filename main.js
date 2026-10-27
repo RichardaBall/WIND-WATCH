@@ -87,6 +87,10 @@ socket.on('remote-player-update', (data) => {
         rp.isDroppingWater = data.isDroppingWater;
         rp.searchLightState = data.searchLightState;
 
+        if (data.slX !== undefined) {
+            rp.targetSearchLightPos.set(data.slX, data.slY, data.slZ);
+        }
+
         if (rp.helicopter) {
             if (rp.helicopter.gearDown !== data.gearDown) {
                 rp.helicopter.gearDown = data.gearDown;
@@ -207,6 +211,7 @@ function spawnRemotePlayer(id, data) {
         lightPoolMesh: lightPoolMesh,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
+        targetSearchLightPos: new THREE.Vector3(data.slX || 0, data.slY || 0, data.slZ || 0),
         targetFrame: data.currentFrame || 5,
         rotorSpeed: data.rotorSpeed || 0,
         gearDown: data.gearDown ?? true,
@@ -263,7 +268,10 @@ function animate() {
             qw: player.mesh.quaternion.w,
             winchState: currentWinchState,
             isDroppingWater: helicopterSystems.isWaterActive(),
-            searchLightState: searchLightSystem.state
+            searchLightState: searchLightSystem.state,
+            slX: searchLightSystem.lightTarget.position.x,
+            slY: searchLightSystem.lightTarget.position.y,
+            slZ: searchLightSystem.lightTarget.position.z
         });
     }
 
@@ -300,9 +308,13 @@ function animate() {
             if (rp.searchLightState !== 'OFF') {
                 rp.searchLight.intensity = nightFactor * 90.0;
                 rp.lightPoolMesh.material.opacity = nightFactor * 0.9;
-                const pos = rp.group.position;
-                rp.searchLightTarget.position.set(pos.x, 0.0, pos.z + 15.0);
-                rp.lightPoolMesh.position.set(pos.x, 0.05, pos.z + 15.0);
+                
+                rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, delta * 15.0);
+                rp.lightPoolMesh.position.set(
+                    rp.searchLightTarget.position.x, 
+                    0.05, 
+                    rp.searchLightTarget.position.z
+                );
             } else {
                 rp.searchLight.intensity = 0.0;
                 rp.lightPoolMesh.material.opacity = 0.0;
@@ -359,26 +371,4 @@ window.addEventListener('start-loading-game', () => {
     const loadingScreen = document.getElementById('loading-screen');
     const copyrightNotice = document.getElementById('copyright-notice');
 
-    let progress = 0;
-    const interval = setInterval(() => {
-        progress += 20;
-        if (progress > 100) progress = 100;
-        if (progressBar) progressBar.style.width = `${progress}%`;
-        if (loadingStatus) loadingStatus.innerText = `Loading assets (${progress}%)...`;
-
-        if (progress >= 100) {
-            clearInterval(interval);
-            if (loadingStatus) loadingStatus.innerText = 'Ready! Launching flight...';
-            setTimeout(() => {
-                if (loadingScreen) {
-                    loadingScreen.style.opacity = '0';
-                    if (copyrightNotice) copyrightNotice.style.opacity = '0';
-                    setTimeout(() => {
-                        loadingScreen.style.display = 'none';
-                        if (copyrightNotice) copyrightNotice.style.display = 'none';
-                    }, 600);
-                }
-            }, 300);
-        }
-    }, 100);
-});
+    let progress =
