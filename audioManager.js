@@ -14,6 +14,10 @@ export class AudioManager {
         this.sprayGainNode = null;
         this.winchNoiseSource = null;
         this.winchGainNode = null;
+        this.rainNoiseSource = null;
+        this.rainGainNode = null;
+        this.windNoiseSource = null;
+        this.windGainNode = null;
 
         // Auto-unlock audio context on user interaction
         const unlockAudio = () => {
@@ -128,6 +132,47 @@ export class AudioManager {
         }
     }
 
+    playThunder() {
+        try {
+            if (this.audioCtx) {
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume();
+                }
+
+                const now = this.audioCtx.currentTime;
+                const duration = 3.5;
+
+                const bufferSize = this.audioCtx.sampleRate * duration;
+                const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+                }
+
+                const noise = this.audioCtx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(300, now);
+                filter.frequency.exponentialRampToValueAtTime(50, now + duration);
+
+                const gain = this.audioCtx.createGain();
+                gain.gain.setValueAtTime(0.7, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.audioCtx.destination);
+
+                noise.start(now);
+                noise.stop(now + duration);
+            }
+        } catch (e) {
+            console.warn("Procedural thunder audio playback error:", e);
+        }
+    }
+
     playSplash() {
         this.stopAllAudio();
 
@@ -168,6 +213,124 @@ export class AudioManager {
             }
         } catch (e) {
             console.warn("Procedural splash audio playback error:", e);
+        }
+    }
+
+    startRain() {
+        if (this.audioCtx && !this.rainNoiseSource) {
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            try {
+                const bufferSize = this.audioCtx.sampleRate * 2;
+                const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                this.rainNoiseSource = this.audioCtx.createBufferSource();
+                this.rainNoiseSource.buffer = buffer;
+                this.rainNoiseSource.loop = true;
+
+                const filter = this.audioCtx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.setValueAtTime(1200, this.audioCtx.currentTime);
+                filter.Q.setValueAtTime(0.5, this.audioCtx.currentTime);
+
+                this.rainGainNode = this.audioCtx.createGain();
+                this.rainGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+                // Subtle background volume (0.06 instead of loud 0.28)
+                this.rainGainNode.gain.linearRampToValueAtTime(0.06, this.audioCtx.currentTime + 0.5);
+
+                this.rainNoiseSource.connect(filter);
+                filter.connect(this.rainGainNode);
+                this.rainGainNode.connect(this.audioCtx.destination);
+                this.rainNoiseSource.start(0);
+            } catch (e) {
+                console.warn("Error starting rain audio:", e);
+            }
+        }
+    }
+
+    stopRain() {
+        if (this.rainNoiseSource && this.rainGainNode) {
+            try {
+                const now = this.audioCtx.currentTime;
+                this.rainGainNode.gain.setValueAtTime(this.rainGainNode.gain.value, now);
+                this.rainGainNode.gain.linearRampToValueAtTime(0.001, now + 0.5);
+                setTimeout(() => {
+                    if (this.rainNoiseSource) {
+                        try { this.rainNoiseSource.stop(); } catch(e) {}
+                        this.rainNoiseSource.disconnect();
+                        this.rainNoiseSource = null;
+                        this.rainGainNode = null;
+                    }
+                }, 500);
+            } catch (e) {
+                this.rainNoiseSource = null;
+                this.rainGainNode = null;
+            }
+        }
+    }
+
+    startWind(volume = 0.06) {
+        if (this.audioCtx && !this.windNoiseSource) {
+            if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+            try {
+                const bufferSize = this.audioCtx.sampleRate * 2;
+                const buffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                this.windNoiseSource = this.audioCtx.createBufferSource();
+                this.windNoiseSource.buffer = buffer;
+                this.windNoiseSource.loop = true;
+
+                const filter = this.audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(220, this.audioCtx.currentTime);
+                filter.Q.setValueAtTime(1.0, this.audioCtx.currentTime);
+
+                this.windGainNode = this.audioCtx.createGain();
+                this.windGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+                // Subtle background volume (capped low)
+                this.windGainNode.gain.linearRampToValueAtTime(Math.min(0.08, volume), this.audioCtx.currentTime + 0.5);
+
+                this.windNoiseSource.connect(filter);
+                filter.connect(this.windGainNode);
+                this.windGainNode.connect(this.audioCtx.destination);
+                this.windNoiseSource.start(0);
+            } catch (e) {
+                console.warn("Error starting wind audio:", e);
+            }
+        }
+    }
+
+    updateWindIntensity(volume) {
+        if (this.windGainNode && this.audioCtx) {
+            try {
+                this.windGainNode.gain.linearRampToValueAtTime(Math.min(0.08, volume), this.audioCtx.currentTime + 0.2);
+            } catch(e) {}
+        }
+    }
+
+    stopWind() {
+        if (this.windNoiseSource && this.windGainNode) {
+            try {
+                const now = this.audioCtx.currentTime;
+                this.windGainNode.gain.setValueAtTime(this.windGainNode.gain.value, now);
+                this.windGainNode.gain.linearRampToValueAtTime(0.001, now + 0.5);
+                setTimeout(() => {
+                    if (this.windNoiseSource) {
+                        try { this.windNoiseSource.stop(); } catch(e) {}
+                        this.windNoiseSource.disconnect();
+                        this.windNoiseSource = null;
+                        this.windGainNode = null;
+                    }
+                }, 500);
+            } catch (e) {
+                this.windNoiseSource = null;
+                this.windGainNode = null;
+            }
         }
     }
 
@@ -293,6 +456,8 @@ export class AudioManager {
         this.stopRotor();
         this.stopWaterSpray();
         this.stopWinch();
+        this.stopRain();
+        this.stopWind();
         this.startupAudio.pause();
         this.startupAudio.currentTime = 0;
         this.shutdownAudio.pause();
@@ -326,7 +491,6 @@ export class AudioManager {
             try {
                 const now = this.audioCtx.currentTime;
                 if (this.rotorGainNode) {
-                    // Fade out rotor sound slightly over 1 second during shutdown overlap
                     this.rotorGainNode.gain.setValueAtTime(this.rotorGainNode.gain.value, now);
                     this.rotorGainNode.gain.linearRampToValueAtTime(0.001, now + 1.2);
                 }

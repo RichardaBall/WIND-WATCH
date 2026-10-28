@@ -62,13 +62,16 @@ export class WindFarm {
             this.bodyMaterial.needsUpdate = true;
         });
 
-        // Restored original wider wind farm layout
+        // Single large wind farm layout: Exactly 20 WTGs positioned radially/grid-wise around (0,0) where the main base is located
         const farmLayout = [
-            { x: 380, z: -320 },
-            { x: 440, z: -270 },
-            { x: 360, z: -210 },
-            { x: 480, z: -380 },
-            { x: 410, z: -440 }
+            // Inner Ring (Radius ~150 units)
+            { x: 150, z: 0 },   { x: -150, z: 0 },  { x: 0, z: 150 },   { x: 0, z: -150 },
+            { x: 106, z: 106 }, { x: -106, z: 106 },{ x: 106, z: -106 }, { x: -106, z: -106 },
+
+            // Outer Ring (Radius ~300 units)
+            { x: 300, z: 0 },   { x: -300, z: 0 },  { x: 0, z: 300 },   { x: 0, z: -300 },
+            { x: 212, z: 212 }, { x: -212, z: 212 },{ x: 212, z: -212 }, { x: -212, z: -212 },
+            { x: 300, z: 150 }, { x: -300, z: 150 },{ x: 150, z: 300 },  { x: -150, z: 300 }
         ];
 
         farmLayout.forEach((pos, index) => {
@@ -334,7 +337,7 @@ export class WindFarm {
             pos.y += 20;
             return pos;
         }
-        return new THREE.Vector3(380, 20, -320);
+        return new THREE.Vector3(150, 20, 0);
     }
 
     isTurbineOnFire(index = 0) {
@@ -378,7 +381,6 @@ export class WindFarm {
                 turbine.foamGeometry.attributes.position.needsUpdate = true;
             }
 
-            // Optimized distance check for spark particles (600x600 instead of 1000x1000)
             if (turbine.isSparking && (!camPos || distSq < 600 * 600)) {
                 turbine.sparkLight.intensity = Math.random() > 0.3 ? 6.0 : 0.5;
 

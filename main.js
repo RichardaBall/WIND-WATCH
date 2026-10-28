@@ -1,3 +1,4 @@
+// main.js
 import * as THREE from 'three';
 import { io } from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.esm.min.js';
 import { setupScene } from './sceneSetup.js';
@@ -19,12 +20,7 @@ import { CloudSystem } from './cloudSystem.js';
 import { WaterSystem } from './waterSystem.js';
 import { WinchSystem } from './winchSystem.js';
 
-const socket = io('https://wind-watch-server.onrender.com');
-
-socket.on('connect', () => {
-    console.log('Connected to internet co-op server!');
-});
-
+// 1. Initialize Scene and All Managers First
 const { scene, camera, renderer, sunLight, ambientLight } = setupScene();
 
 const ocean = new OceanWater(scene, sunLight);
@@ -37,13 +33,13 @@ const player = new HelicopterPlayer(scene);
 const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
 
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
-helicopterSystems.tools['WINCH'].socket = socket;
+player.helicopterSystems = helicopterSystems; // Link helicopter systems reference to player for resets
 
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
 
 const collisionManager = new CollisionManager(scene, player, windFarm);
-const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem, socket);
+const missionManager = new MissionManager(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem, null);
 const hudManager = new HudManager(player, helicopterSystems, searchLightSystem);
 
 const settings = setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem);
@@ -51,122 +47,11 @@ const inputManager = new InputManager(camera, player, helicopterSystems, searchL
 
 const remotePlayers = {};
 
-socket.on('current-players', (players) => {
-    for (const id in players) {
-        if (id !== socket.id) {
-            spawnRemotePlayer(id, players[id]);
-        }
-    }
-});
-
-socket.on('player-joined', (playerData) => {
-    spawnRemotePlayer(playerData.id, playerData);
-});
-
-socket.on('sync-world', (worldData) => {
-    if (worldData.timeOfDay !== undefined && dayNightCycle) {
-        dayNightCycle.timeOfDay = worldData.timeOfDay;
-    }
-    if (worldData.weather !== undefined && weatherSystem) {
-        weatherSystem.setWeather(worldData.weather);
-    }
-    if (worldData.cloudSeed !== undefined && cloudSystem) {
-        cloudSystem.setSeed(worldData.cloudSeed);
-    }
-});
-
-socket.on('remote-player-update', (data) => {
-    if (remotePlayers[data.id]) {
-        const rp = remotePlayers[data.id];
-        rp.targetPos.set(data.x, data.y, data.z);
-        rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
-        rp.targetFrame = data.currentFrame;
-        rp.rotorSpeed = data.rotorSpeed;
-        rp.gearDown = data.gearDown;
-        rp.winchState = data.winchState || 'STOWED';
-        rp.isDroppingWater = data.isDroppingWater;
-        rp.searchLightState = data.searchLightState;
-
-        if (data.slX !== undefined) {
-            rp.targetSearchLightPos.set(data.slX, data.slY, data.slZ);
-        }
-
-        if (rp.helicopter) {
-            if (rp.helicopter.gearDown !== data.gearDown) {
-                rp.helicopter.gearDown = data.gearDown;
-                const currentOffset = rp.helicopter.material.map ? rp.helicopter.material.map.offset.x : 0;
-                if (data.gearDown && rp.helicopter.gearDownTex) {
-                    rp.helicopter.material.map = rp.helicopter.gearDownTex;
-                } else if (!data.gearDown && rp.helicopter.gearUpTex) {
-                    rp.helicopter.material.map = rp.helicopter.gearUpTex;
-                }
-                if (rp.helicopter.material.map) {
-                    rp.helicopter.material.map.offset.x = currentOffset;
-                }
-                rp.helicopter.material.needsUpdate = true;
-            }
-        }
-
-        if (rp.waterSystem) {
-            if (data.isDroppingWater && !rp.waterSystem.isActive) {
-                rp.waterSystem.start();
-            } else if (!data.isDroppingWater && rp.waterSystem.isActive) {
-                rp.waterSystem.stop();
-            }
-        }
-    }
-});
-
-socket.on('player-disconnected', (id) => {
-    if (remotePlayers[id]) {
-        scene.remove(remotePlayers[id].group);
-        if (remotePlayers[id].winchSystem && remotePlayers[id].winchSystem.cableLine) {
-            scene.remove(remotePlayers[id].winchSystem.cableLine);
-            scene.remove(remotePlayers[id].winchSystem.hookMesh);
-            scene.remove(remotePlayers[id].winchSystem.rotorWashSystem);
-        }
-        if (remotePlayers[id].waterSystem && remotePlayers[id].waterSystem.particleSystem) {
-            scene.remove(remotePlayers[id].waterSystem.particleSystem);
-            scene.remove(remotePlayers[id].waterSystem.splashSystem);
-        }
-        if (remotePlayers[id].searchLight) scene.remove(remotePlayers[id].searchLight);
-        if (remotePlayers[id].searchLightTarget) scene.remove(remotePlayers[id].searchLightTarget);
-        if (remotePlayers[id].lightPoolMesh) scene.remove(remotePlayers[id].lightPoolMesh);
-        delete remotePlayers[id];
-    }
-});
-
-socket.on('sync-mission', (missionData) => {
-    if (mainBase && typeof mainBase.resetFade === 'function') {
-        mainBase.resetFade();
-    }
-    if (missionManager) {
-        missionManager.spawnSpecificMission(missionData.type, missionData);
-    }
-});
-
-socket.on('survivor-rescued', () => {
-    if (missionManager && missionManager.liferaftMission) {
-        missionManager.liferaftMission.setSurvivorRescued(true);
-    }
-});
-
-socket.on('mission-completed', () => {
-    if (mainBase && typeof mainBase.resetFade === 'function') {
-        mainBase.resetFade();
-    }
-    if (missionManager && missionManager.liferaftMission) {
-        missionManager.liferaftMission.isFullyCompleted = true;
-    }
-    if (missionManager) {
-        missionManager.clearAllMissions();
-    }
-});
-
 function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
-    const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, { gearDown: false });
-    const remoteWinchSystem = new WinchSystem(scene, remoteHeli.group, { gearDown: false });
+    const remotePlayerRef = { gearDown: data.gearDown ?? true };
+    const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, remotePlayerRef);
+    const remoteWinchSystem = new WinchSystem(scene, remoteHeli.group, remotePlayerRef);
 
     const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
     searchLight.position.set(0, -0.5, 0);
@@ -206,20 +91,131 @@ function spawnRemotePlayer(id, data) {
         helicopter: remoteHeli,
         waterSystem: remoteWaterSystem,
         winchSystem: remoteWinchSystem,
+        playerRef: remotePlayerRef,
         searchLight: searchLight,
         searchLightTarget: searchLightTarget,
         lightPoolMesh: lightPoolMesh,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
-        targetSearchLightPos: new THREE.Vector3(data.slX || 0, data.slY || 0, data.slZ || 0),
         targetFrame: data.currentFrame || 5,
         rotorSpeed: data.rotorSpeed || 0,
         gearDown: data.gearDown ?? true,
         winchState: data.winchState || 'STOWED',
         isDroppingWater: data.isDroppingWater || false,
-        searchLightState: data.searchLightState || 'OFF'
+        searchLightState: data.searchLightState || 'OFF',
+        targetSearchLightPos: new THREE.Vector3()
     };
+
+    navRadar.addOrUpdateMarker(`remote_${id}`, remoteHeli, '#22c55e', 'PLAYER');
 }
+
+// 2. Connect to Socket and Register Listeners
+const socket = io('https://wind-watch-server.onrender.com');
+helicopterSystems.tools['WINCH'].socket = socket;
+missionManager.socket = socket;
+
+socket.on('connect', () => {
+    console.log('Connected to internet co-op server!');
+});
+
+socket.on('current-players', (players) => {
+    for (const id in players) {
+        if (id !== socket.id) {
+            spawnRemotePlayer(id, players[id]);
+        }
+    }
+});
+
+socket.on('player-joined', (playerData) => {
+    spawnRemotePlayer(playerData.id, playerData);
+});
+
+socket.on('sync-world', (worldData) => {
+    if (worldData.timeOfDay !== undefined && dayNightCycle) {
+        dayNightCycle.timeOfDay = worldData.timeOfDay;
+    }
+    if (worldData.weather !== undefined && weatherSystem) {
+        weatherSystem.setWeather(worldData.weather);
+    }
+    if (worldData.cloudSeed !== undefined && cloudSystem) {
+        cloudSystem.setSeed(worldData.cloudSeed);
+    }
+});
+
+socket.on('remote-player-update', (data) => {
+    if (remotePlayers[data.id]) {
+        const rp = remotePlayers[data.id];
+        rp.targetPos.set(data.x, data.y, data.z);
+        rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
+        rp.targetFrame = data.currentFrame;
+        rp.rotorSpeed = data.rotorSpeed;
+        rp.gearDown = data.gearDown;
+        if (rp.playerRef) {
+            rp.playerRef.gearDown = data.gearDown;
+        }
+        rp.winchState = data.winchState || 'STOWED';
+        rp.isDroppingWater = data.isDroppingWater;
+        rp.searchLightState = data.searchLightState;
+
+        if (data.slX !== undefined) {
+            rp.targetSearchLightPos.set(data.slX, data.slY, data.slZ);
+        }
+
+        if (rp.helicopter) {
+            if (rp.helicopter.gearDown !== data.gearDown) {
+                rp.helicopter.gearDown = data.gearDown;
+                const currentOffset = rp.helicopter.material.map ? rp.helicopter.material.map.offset.x : 0;
+                if (data.gearDown && rp.helicopter.gearDownTex) {
+                    rp.helicopter.material.map = rp.helicopter.gearDownTex;
+                } else if (!data.gearDown && rp.helicopter.gearUpTex) {
+                    rp.helicopter.material.map = rp.helicopter.gearUpTex;
+                }
+                if (rp.helicopter.material.map) {
+                    rp.helicopter.material.map.offset.x = currentOffset;
+                }
+                rp.helicopter.material.needsUpdate = true;
+            }
+        }
+
+        if (rp.waterSystem) {
+            rp.waterSystem.isActive = !!data.isDroppingWater;
+        }
+    }
+});
+
+socket.on('player-disconnected', (id) => {
+    if (remotePlayers[id]) {
+        scene.remove(remotePlayers[id].group);
+        if (remotePlayers[id].winchSystem && remotePlayers[id].winchSystem.cableLine) {
+            scene.remove(remotePlayers[id].winchSystem.cableLine);
+            scene.remove(remotePlayers[id].winchSystem.hookMesh);
+            scene.remove(remotePlayers[id].winchSystem.rotorWashSystem);
+        }
+        if (remotePlayers[id].waterSystem && remotePlayers[id].waterSystem.particleSystem) {
+            scene.remove(remotePlayers[id].waterSystem.particleSystem);
+            scene.remove(remotePlayers[id].waterSystem.splashSystem);
+        }
+        if (remotePlayers[id].searchLight) scene.remove(remotePlayers[id].searchLight);
+        if (remotePlayers[id].searchLightTarget) scene.remove(remotePlayers[id].searchLightTarget);
+        if (remotePlayers[id].lightPoolMesh) scene.remove(remotePlayers[id].lightPoolMesh);
+        navRadar.removeMarker(`remote_${id}`);
+        delete remotePlayers[id];
+    }
+});
+
+socket.on('sync-mission', (missionData) => {
+    if (mainBase && typeof mainBase.resetFade === 'function') mainBase.resetFade();
+    if (missionManager) missionManager.spawnSpecificMission(missionData.type, missionData);
+});
+
+socket.on('mission-state-updated', (missionState) => {
+    if (missionManager) missionManager.applyMissionState(missionState);
+});
+
+socket.on('mission-completed', () => {
+    if (mainBase && typeof mainBase.resetFade === 'function') mainBase.resetFade();
+    if (missionManager) missionManager.clearAllMissions();
+});
 
 window.addEventListener('toggle-settings', (e) => {
     const isOpen = e.detail.active;
@@ -230,6 +226,7 @@ window.addEventListener('toggle-settings', (e) => {
 
 const clock = new THREE.Clock();
 let networkTimer = 0;
+let logicThrottleTimer = 0;
 
 function animate() {
     requestAnimationFrame(animate);
@@ -252,8 +249,6 @@ function animate() {
     if (networkTimer >= 0.05) {
         networkTimer = 0;
         const pos = player.getPosition();
-        const winchTool = helicopterSystems.tools['WINCH'];
-        const currentWinchState = winchTool ? (winchTool.isActive ? 'DEPLOYED' : 'STOWED') : 'STOWED';
 
         socket.emit('player-update', {
             x: pos.x,
@@ -266,7 +261,7 @@ function animate() {
             qy: player.mesh.quaternion.y,
             qz: player.mesh.quaternion.z,
             qw: player.mesh.quaternion.w,
-            winchState: currentWinchState,
+            winchState: player.winchState,
             isDroppingWater: helicopterSystems.isWaterActive(),
             searchLightState: searchLightSystem.state,
             slX: searchLightSystem.lightTarget.position.x,
@@ -279,6 +274,7 @@ function animate() {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
         rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
+        rp.group.updateMatrixWorld(true); // Ensure world position matrix is fresh for child systems
 
         if (rp.helicopter && rp.helicopter.rotorBlades) {
             for (const blade of rp.helicopter.rotorBlades) {
@@ -296,7 +292,7 @@ function animate() {
 
         if (rp.waterSystem) rp.waterSystem.update(delta);
         if (rp.winchSystem) {
-            if (rp.winchState === 'DEPLOYED') {
+            if (rp.winchState === 'DEPLOYED' || rp.winchState === 'LOWERING') {
                 rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 1.0, delta * 2.0);
             } else {
                 rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 0.0, delta * 2.0);
@@ -329,6 +325,11 @@ function animate() {
 
     const mouseWorldPos = inputManager.getMouseWorldPosition();
     searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+    
+    logicThrottleTimer += delta;
+    if (logicThrottleTimer >= 0.05) {
+        logicThrottleTimer = 0;
+    }
     navRadar.update();
 
     const playerPos = player.getPosition();
@@ -339,24 +340,7 @@ function animate() {
     camera.position.copy(focusPoint).add(cameraOffset);
     camera.lookAt(focusPoint);
 
-    const padCenter = new THREE.Vector2(0, 0);
-    const pos2D = new THREE.Vector2(playerPos.x, playerPos.z);
-    const distanceFromBase = pos2D.distanceTo(padCenter);
-    const isLandedAtBase = distanceFromBase < 20.0 && player.gearDown === true && playerPos.y <= 7.0;
-    
-    const activeRaft = missionManager.liferaftMission;
-    const isSurvivorRescued = activeRaft && (activeRaft.isRescued || helicopterSystems.tools['WINCH'].hasHookedSurvivor);
-    const showRescuedSurvivor = isSurvivorRescued && isLandedAtBase;
-
-    if (showRescuedSurvivor && activeRaft && !activeRaft.isFullyCompleted) {
-        activeRaft.fadeRaft(delta);
-        if (mainBase.hasFadedOut) {
-            activeRaft.isFullyCompleted = true;
-            missionManager.completeActiveMission();
-        }
-    }
-
-    mainBase.update(delta, nightFactor, camera.quaternion, searchLightSystem, showRescuedSurvivor);
+    mainBase.update(delta, nightFactor, camera.quaternion, searchLightSystem, false);
     windFarm.update(delta, camera.quaternion);
     
     player.mesh.quaternion.copy(camera.quaternion);

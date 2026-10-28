@@ -35,7 +35,7 @@ export class HudManager {
                 </div>
             </div>
 
-            <!-- CENTRAL HUD ICONS (Engine, Gear, Tool/Winch, Light) -->
+            <!-- CENTRAL HUD ICONS (Engine, Gear, Light, Tool Mode) -->
             <div style="display: flex; gap: 14px; align-items: center; pointer-events: auto;">
                 <!-- ENGINE BUTTON (Mechanical Engine Block Icon) -->
                 <button id="hud-engine-btn" title="Toggle Engine (E)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
@@ -58,13 +58,6 @@ export class HudManager {
                     </svg>
                 </button>
 
-                <!-- WATER / WINCH BUTTON -->
-                <button id="hud-tool-btn" title="Switch Water / Winch (1 / 2)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #3b82f6;">
-                    <svg id="hud-tool-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
-                    </svg>
-                </button>
-
                 <!-- LIGHT INDICATOR BUTTON -->
                 <button id="hud-light-btn" title="Toggle Searchlight (L)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -77,6 +70,14 @@ export class HudManager {
                         <line x1="21" y1="12" x2="23" y2="12"></line>
                         <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
                         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+
+                <!-- TOOL MODE BUTTON (Dynamic: Water Drop for 1, Water Fill for 2) -->
+                <button id="hud-tool-btn" title="Toggle Tool Mode (1 or 2)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
+                    <!-- Default Water Drop SVG -->
+                    <svg id="hud-tool-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
                     </svg>
                 </button>
             </div>
@@ -104,16 +105,16 @@ export class HudManager {
             }
         });
 
+        document.getElementById('hud-light-btn').addEventListener('click', () => {
+            if (this.searchLightSystem) {
+                this.searchLightSystem.cycleState(null);
+            }
+        });
+
         document.getElementById('hud-tool-btn').addEventListener('click', () => {
             if (this.helicopterSystems) {
                 const nextTool = this.helicopterSystems.activeToolKey === 'WATER' ? 'WINCH' : 'WATER';
                 this.helicopterSystems.setTool(nextTool);
-            }
-        });
-
-        document.getElementById('hud-light-btn').addEventListener('click', () => {
-            if (this.searchLightSystem) {
-                this.searchLightSystem.cycleState(null);
             }
         });
     }
@@ -141,7 +142,7 @@ export class HudManager {
             waterFill.style.height = `${waterPercent}%`;
         }
 
-        // 2. Update Engine Icon State Colours (White when off, flash yellow when starting, green when running, flash red when shutting down, solid red when crashed)
+        // 2. Update Engine Icon State Colours
         const engineBtn = document.getElementById('hud-engine-btn');
         if (engineBtn && this.player) {
             const state = this.player.engineState;
@@ -156,32 +157,17 @@ export class HudManager {
             } else if (state === 'CRASHED') {
                 engineBtn.style.color = '#ef4444';
             } else {
-                // OFF
                 engineBtn.style.color = '#ffffff';
             }
         }
 
-        // 3. Update Landing Gear Icon (Green when down, White when up)
+        // 3. Update Landing Gear Icon
         const gearBtn = document.getElementById('hud-gear-btn');
         if (gearBtn && this.player) {
             gearBtn.style.color = this.player.gearDown ? '#22c55e' : '#ffffff';
         }
 
-        // 4. Update Tool Icon (Water droplet vs J hook)
-        const toolBtn = document.getElementById('hud-tool-btn');
-        const toolIcon = document.getElementById('hud-tool-icon');
-        if (toolBtn && toolIcon) {
-            const isWater = this.helicopterSystems.activeToolKey === 'WATER';
-            if (isWater) {
-                toolBtn.style.color = '#3b82f6';
-                toolIcon.innerHTML = `<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>`;
-            } else {
-                toolBtn.style.color = '#f97316';
-                toolIcon.innerHTML = `<path d="M14 3v11a5 5 0 0 1-10 0"></path>`;
-            }
-        }
-
-        // 5. Update Searchlight Icon (White when off, Green when on, Red when locked)
+        // 4. Update Searchlight Icon
         const lightBtn = document.getElementById('hud-light-btn');
         if (lightBtn && this.searchLightSystem) {
             if (this.searchLightSystem.state === 'OFF') {
@@ -190,6 +176,29 @@ export class HudManager {
                 lightBtn.style.color = '#ef4444';
             } else {
                 lightBtn.style.color = '#22c55e';
+            }
+        }
+
+        // 5. Update Tool Button Icon and Color based on Active Tool (WATER vs WINCH)
+        const toolBtn = document.getElementById('hud-tool-btn');
+        const toolIconSvg = document.getElementById('hud-tool-icon');
+        if (toolBtn && toolIconSvg && this.helicopterSystems) {
+            const activeTool = this.helicopterSystems.activeToolKey;
+            if (activeTool === 'WATER') {
+                // Water Drop Symbol (Pressing 1)
+                toolBtn.style.color = '#38bdf8';
+                toolIconSvg.innerHTML = `<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>`;
+                toolBtn.title = "Water Drop Tool (1 & Space)";
+            } else {
+                // Water Fill Symbol - Bucket with upward-facing arrow (Pressing 2)
+                toolBtn.style.color = '#0ea5e9';
+                toolIconSvg.innerHTML = `
+                    <path d="M3 6h18v2H3z"></path>
+                    <path d="M5 8l2 12h10l2-12"></path>
+                    <path d="M12 17v-6"></path>
+                    <path d="M9 14l3-3 3 3"></path>
+                `;
+                toolBtn.title = "Water Fill System (2 & Space)";
             }
         }
     }

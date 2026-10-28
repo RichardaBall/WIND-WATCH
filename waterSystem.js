@@ -136,7 +136,7 @@ export class WaterSystem {
 
     start() {
         if (this.playerRef && this.playerRef.gearDown) {
-            console.log("Cannot spray water while landing gear is down![cite: 7]");
+            console.log("Cannot spray water while landing gear is down!");
             this.isActive = false;
             return;
         }
@@ -144,7 +144,7 @@ export class WaterSystem {
         if (this.playerRef && this.playerRef.audioManager) {
             this.playerRef.audioManager.startWaterSpray();
         }
-        console.log("Water Spray: ACTIVE[cite: 7]");
+        console.log("Water Spray: ACTIVE");
     }
 
     stop() {

@@ -10,7 +10,7 @@ export class CloudSystem {
         this.seed = 123456; // Default deterministic seed
         
         this.params = {
-            maxCount: 135,        // Maximum pool size for worst-case storm weather
+            maxCount: 150,        // Maximum pool size for worst-case weather
             baseCount: 100,       // Normal clear weather count
             altitudeLow: 14,
             altitudeHigh: 45,
@@ -33,7 +33,6 @@ export class CloudSystem {
     setSeed(seed) {
         if (this.seed !== seed) {
             this.seed = seed;
-            // Clear existing clouds and rebuild deterministically with the new seed
             while (this.cloudsGroup.children.length > 0) {
                 this.cloudsGroup.remove(this.cloudsGroup.children[0]);
             }
@@ -49,7 +48,6 @@ export class CloudSystem {
     }
 
     buildCloudPool() {
-        // Create canvas texture once
         const canvas = document.createElement('canvas');
         canvas.width = 128;
         canvas.height = 128;
@@ -62,7 +60,6 @@ export class CloudSystem {
         ctx.fillRect(0, 0, 128, 128);
 
         const texture = new THREE.CanvasTexture(canvas);
-        // FIX: Use MeshBasicMaterial so clouds don't turn pitch black or vanish under changing scene lighting
         this.material = new THREE.MeshBasicMaterial({
             map: texture,
             transparent: true,
@@ -75,7 +72,6 @@ export class CloudSystem {
         const puffGeo = new THREE.PlaneGeometry(this.params.size, this.params.size * 0.5);
         this.clouds = [];
 
-        // Pre-spawn maximum pool of clouds using the seeded generator
         for (let i = 0; i < this.params.maxCount; i++) {
             const cluster = new THREE.Group();
             const puffCount = 4 + Math.floor(this.nextRandom() * 3);
@@ -104,7 +100,6 @@ export class CloudSystem {
                 (this.nextRandom() - 0.5) * 1800
             );
 
-            // Initialize scale directly to 1.0 so clouds appear immediately upon sync/spawn
             cluster.scale.set(1.0, 1.0, 1.0);
 
             this.cloudsGroup.add(cluster);
@@ -125,23 +120,44 @@ export class CloudSystem {
         if (this.currentWeatherState !== weatherType) {
             this.currentWeatherState = weatherType;
 
-            // Set targets based on weather without destroying any geometry
-            if (weatherType === 'STORM') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.8);
-                this.targetTint = 0.45;
-                this.targetOpacity = 0.9;
-            } else if (weatherType === 'RAIN' || weatherType === 'SNOW') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.4);
-                this.targetTint = 0.7;
-                this.targetOpacity = 0.82;
-            } else if (weatherType === 'FOG' || weatherType === 'RAIN_FOG' || weatherType === 'SNOW_FOG') {
-                this.targetActiveCount = Math.round(this.params.baseCount * 1.3);
-                this.targetTint = 0.85;
-                this.targetOpacity = 0.88;
-            } else {
-                this.targetActiveCount = this.params.baseCount;
-                this.targetTint = 1.0;
-                this.targetOpacity = this.params.opacity;
+            // Dynamic cloud behavior mapped to all 7 weather types
+            switch (weatherType) {
+                case 'STORM':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.8);
+                    this.targetTint = 0.35; // Dark, ominous storm clouds
+                    this.targetOpacity = 0.95;
+                    break;
+                case 'RAIN':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.4);
+                    this.targetTint = 0.65;
+                    this.targetOpacity = 0.85;
+                    break;
+                case 'FOG':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.6);
+                    this.targetTint = 0.9;
+                    this.targetOpacity = 0.92; // Thick low hanging fog clouds
+                    break;
+                case 'RAIN_FOG':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.7);
+                    this.targetTint = 0.75;
+                    this.targetOpacity = 0.90;
+                    break;
+                case 'SNOW':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.3);
+                    this.targetTint = 0.95; // Bright snowy winter clouds
+                    this.targetOpacity = 0.85;
+                    break;
+                case 'SNOW_FOG':
+                    this.targetActiveCount = Math.round(this.params.baseCount * 1.5);
+                    this.targetTint = 0.90;
+                    this.targetOpacity = 0.90;
+                    break;
+                case 'CLEAR':
+                default:
+                    this.targetActiveCount = this.params.baseCount;
+                    this.targetTint = 1.0;
+                    this.targetOpacity = this.params.opacity;
+                    break;
             }
         }
 
@@ -155,9 +171,9 @@ export class CloudSystem {
         }
 
         let speedMultiplier = 1.0;
-        if (weatherType === 'STORM') speedMultiplier = 2.6;
-        else if (weatherType === 'RAIN' || weatherType === 'RAIN_FOG') speedMultiplier = 1.6;
-        else if (weatherType === 'FOG') speedMultiplier = 0.5;
+        if (weatherType === 'STORM') speedMultiplier = 2.8;
+        else if (weatherType === 'RAIN' || weatherType === 'RAIN_FOG') speedMultiplier = 1.7;
+        else if (weatherType === 'FOG' || weatherType === 'SNOW_FOG') speedMultiplier = 0.4;
 
         const elapsedTime = Date.now() * 0.001;
 
@@ -166,7 +182,6 @@ export class CloudSystem {
             const cloud = this.clouds[i];
             const shouldBeActive = i < Math.round(this.currentActiveCount);
 
-            // Smoothly scale clouds in or out based on whether they should be active
             const targetClusterScale = shouldBeActive ? 1.0 : 0.0;
             cloud.mesh.scale.x = THREE.MathUtils.lerp(cloud.mesh.scale.x, targetClusterScale, delta * 3.0);
             cloud.mesh.scale.y = THREE.MathUtils.lerp(cloud.mesh.scale.y, targetClusterScale, delta * 3.0);
@@ -180,16 +195,12 @@ export class CloudSystem {
                     cloud.mesh.position.x = -900;
                 }
 
-                // Subtle organic pulsing
-                const pulse = 1.0 + Math.sin(elapsedTime * 1.5 + cloud.pulseOffset) * 0.03;
-                
                 if (cameraQuaternion) {
                     cloud.mesh.quaternion.copy(cameraQuaternion);
                 }
             }
         }
 
-        // FIX: Prevent clouds from disappearing into complete blackness at night
         const baseTint = 1.0 - (nightFactor * 0.5);
         this.currentTint = THREE.MathUtils.lerp(this.currentTint, baseTint * this.targetTint, delta * 2.0);
         

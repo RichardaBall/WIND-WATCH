@@ -59,12 +59,14 @@ export class InputManager {
             if (e.code === 'KeyE') {
                 this.player.handleEngineKey();
             }
+            /*
             if (e.code === 'KeyL') {
                 this.raycaster.setFromCamera(this.mouse, this.camera);
                 const mouseWorldPos = new THREE.Vector3();
                 this.raycaster.ray.intersectPlane(this.planeIntersectTarget, mouseWorldPos);
                 this.searchLightSystem.cycleState(mouseWorldPos);
             }
+            */
             if (e.code === 'Digit1') {
                 this.helicopterSystems.setTool('WATER');
             }
@@ -75,7 +77,7 @@ export class InputManager {
                 if (!e.repeat) {
                     if (this.helicopterSystems.activeToolKey === 'WATER') {
                         this.helicopterSystems.startActiveTool();
-                    } else {
+                    } else if (this.helicopterSystems.activeToolKey === 'WINCH') {
                         this.helicopterSystems.toggleActiveTool();
                     }
                 }

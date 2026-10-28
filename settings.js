@@ -31,93 +31,6 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
     btnContainer.style.gap = '8px';
     container.appendChild(btnContainer);
 
-    const toggleBtn = document.createElement('button');
-    toggleBtn.innerText = 'Toggle Day / Night';
-    toggleBtn.style.padding = '6px 12px';
-    toggleBtn.style.background = '#1a365d';
-    toggleBtn.style.color = '#ffffff';
-    toggleBtn.style.border = '1px solid #4a90e2';
-    toggleBtn.style.borderRadius = '4px';
-    toggleBtn.style.cursor = 'pointer';
-    btnContainer.appendChild(toggleBtn);
-
-    const timelapseBtn = document.createElement('button');
-    timelapseBtn.innerText = 'Timelapse: OFF (100x)';
-    timelapseBtn.style.padding = '6px 12px';
-    timelapseBtn.style.background = '#1a365d';
-    timelapseBtn.style.color = '#ffffff';
-    timelapseBtn.style.border = '1px solid #4a90e2';
-    timelapseBtn.style.borderRadius = '4px';
-    timelapseBtn.style.cursor = 'pointer';
-    btnContainer.appendChild(timelapseBtn);
-
-    const heliVisBtn = document.createElement('button');
-    heliVisBtn.innerText = 'Heli Visibility: ON';
-    heliVisBtn.style.padding = '6px 12px';
-    heliVisBtn.style.background = '#1a365d';
-    heliVisBtn.style.color = '#ffffff';
-    heliVisBtn.style.border = '1px solid #4a90e2';
-    heliVisBtn.style.borderRadius = '4px';
-    heliVisBtn.style.cursor = 'pointer';
-    btnContainer.appendChild(heliVisBtn);
-
-    let cloudsVisible = true;
-    const cloudVisBtn = document.createElement('button');
-    cloudVisBtn.innerText = 'Clouds: ON';
-    cloudVisBtn.style.padding = '6px 12px';
-    cloudVisBtn.style.background = '#1a365d';
-    cloudVisBtn.style.color = '#ffffff';
-    cloudVisBtn.style.border = '1px solid #4a90e2';
-    cloudVisBtn.style.borderRadius = '4px';
-    cloudVisBtn.style.cursor = 'pointer';
-    cloudVisBtn.onclick = () => {
-        cloudsVisible = !cloudsVisible;
-        if (cloudSystem && cloudSystem.cloudGroup) {
-            cloudSystem.cloudGroup.visible = cloudsVisible;
-        }
-        cloudVisBtn.innerText = `Clouds: ${cloudsVisible ? 'ON' : 'OFF'}`;
-        cloudVisBtn.style.background = cloudsVisible ? '#1a365d' : '#2b6cb0';
-    };
-    btnContainer.appendChild(cloudVisBtn);
-
-    // Weather Override Button (Cycles through all 6 weather states)
-    const weatherBtn = document.createElement('button');
-    weatherBtn.innerText = 'Weather: CLEAR';
-    weatherBtn.style.padding = '6px 12px';
-    weatherBtn.style.background = '#1a365d';
-    weatherBtn.style.color = '#ffffff';
-    weatherBtn.style.border = '1px solid #4a90e2';
-    weatherBtn.style.borderRadius = '4px';
-    weatherBtn.style.cursor = 'pointer';
-    weatherBtn.onclick = () => {
-        if (weatherSystem && typeof weatherSystem.setWeather === 'function') {
-            const sequence = ['CLEAR', 'RAIN', 'FOG', 'RAIN_FOG', 'STORM', 'SNOW', 'SNOW_FOG'];
-            const currentIndex = sequence.indexOf(weatherSystem.targetWeather);
-            const nextIndex = (currentIndex + 1) % sequence.length;
-            const next = sequence[nextIndex];
-            
-            weatherSystem.setWeather(next);
-            weatherBtn.innerText = `Weather: ${next}`;
-        }
-    };
-    btnContainer.appendChild(weatherBtn);
-
-    // Skip Mission Button
-    const testMissionBtn = document.createElement('button');
-    testMissionBtn.innerText = 'Skip Mission';
-    testMissionBtn.style.padding = '6px 12px';
-    testMissionBtn.style.background = '#7c2d12';
-    testMissionBtn.style.color = '#ffffff';
-    testMissionBtn.style.border = '1px solid #f97316';
-    testMissionBtn.style.borderRadius = '4px';
-    testMissionBtn.style.cursor = 'pointer';
-    testMissionBtn.onclick = () => {
-        if (missionManager && typeof missionManager.completeActiveMission === 'function') {
-            missionManager.completeActiveMission();
-        }
-    };
-    btnContainer.appendChild(testMissionBtn);
-
     // Unlimited Fuel Button
     const fuelBtn = document.createElement('button');
     fuelBtn.innerText = 'Unlimited Fuel: OFF';
@@ -178,9 +91,8 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">Mouse Wheel</span><span>Zoom Camera</span></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">E Key</span><span>Engine Start / Stop</span></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">G Key</span><span>Toggle Landing Gear</span></div>
-            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">L Key</span><span>Cycle Searchlight</span></div>
-            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">1 Key</span><span>Select Water Tool</span></div>
-            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">2 Key</span><span>Select Winch Tool</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">1 Key</span><span>Water Drop Tool</span></div>
+            <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">2 Key</span><span>Water Fill Tool</span></div>
             <div style="display: flex; justify-content: space-between;"><span style="color: #93c5fd;">Spacebar</span><span>Activate Tool</span></div>
         </div>
     `;
@@ -192,38 +104,6 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
     };
     closeControlsBtn.onclick = () => {
         controlsModal.style.display = 'none';
-    };
-
-    let isNight = false;
-    toggleBtn.onclick = () => {
-        isNight = !isNight;
-        if (typeof dayNightCycle.setTimeOfDay === 'function') {
-            dayNightCycle.setTimeOfDay(isNight ? 0.75 : 0.25);
-        } else if (typeof dayNightCycle.toggleManualOverride === 'function') {
-            dayNightCycle.toggleManualOverride();
-        }
-    };
-
-    timelapseBtn.onclick = () => {
-        let isActive = false;
-        if (typeof dayNightCycle.toggleTimelapse === 'function') {
-            isActive = dayNightCycle.toggleTimelapse();
-        } else if (typeof dayNightCycle.setTimelapse === 'function') {
-            isActive = timelapseBtn.innerText.includes('OFF');
-            dayNightCycle.setTimelapse(isActive);
-        }
-        timelapseBtn.innerText = isActive ? 'Timelapse: ON (100x)' : 'Timelapse: OFF (100x)';
-        timelapseBtn.style.background = isActive ? '#2b6cb0' : '#1a365d';
-    };
-
-    let heliVisible = true;
-    heliVisBtn.onclick = () => {
-        heliVisible = !heliVisible;
-        if (player && typeof player.setVisibility === 'function') {
-            player.setVisibility(heliVisible);
-        }
-        heliVisBtn.innerText = `Heli Visibility: ${heliVisible ? 'ON' : 'OFF'}`;
-        heliVisBtn.style.background = heliVisible ? '#1a365d' : '#2b6cb0';
     };
 
     document.body.appendChild(container);

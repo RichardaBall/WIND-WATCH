@@ -91,6 +91,13 @@ export class HelicopterSystems {
             }
         }
 
+        // Refill water at a constant rate when winch is deployed and at sea level
+        const winchTool = this.tools['WINCH'];
+        const isWinchAtSeaLevel = winchTool && winchTool.isActive && winchTool.currentExtension > 0.95 && winchTool.hookWorldPos.y <= 0.5;
+        if (isWinchAtSeaLevel) {
+            this.water = Math.min(this.maxWater, this.water + delta * 30);
+        }
+
         // Deplete fuel only when the engine state is RUNNING
         const engineRunning = this.playerRef && this.playerRef.engineState === 'RUNNING';
         if (engineRunning) {
@@ -98,7 +105,7 @@ export class HelicopterSystems {
                 this.fuel = this.maxFuel;
             } else {
                 const gearIsDown = this.playerRef && this.playerRef.gearDown;
-                const fuelBurnRate = gearIsDown ? 1.2 : 1.0;
+                const fuelBurnRate = gearIsDown ? 0.6 : 0.5;
                 this.fuel = Math.max(0, this.fuel - delta * fuelBurnRate);
 
                 if (this.fuel <= 20 && !this.lowFuelTriggered) {

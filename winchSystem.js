@@ -1,3 +1,4 @@
+// winchSystem.js
 import * as THREE from 'three';
 
 export class WinchSystem {
@@ -12,9 +13,6 @@ export class WinchSystem {
         this.targetExtension = 0.0;
         this.localAnchorY = -0.5;
         this.isDescendingForWinch = false;
-
-        this.liferaftMissionRef = null;
-        this.hasHookedSurvivor = false;
 
         // --- Rotor Wash Particle Mist Setup ---
         this.particlesCount = 3000;
@@ -83,36 +81,6 @@ export class WinchSystem {
         this.hookMesh.rotation.x = Math.PI;
         this.hookMesh.visible = false;
         this.scene.add(this.hookMesh);
-
-        const survivorGeo = new THREE.PlaneGeometry(3, 3);
-        const survivorMat = new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            roughness: 0.4,
-            transparent: true,
-            alphaTest: 0.5,
-            side: THREE.DoubleSide
-        });
-        
-        const textureLoader = new THREE.TextureLoader();
-        textureLoader.load('raft_survivor_1_waving.png', (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(1 / 43, 1);
-            survivorMat.map = tex;
-            survivorMat.needsUpdate = true;
-        });
-
-        this.hookedSurvivorMesh = new THREE.Mesh(survivorGeo, survivorMat);
-        this.hookedSurvivorMesh.position.set(0, -0.8, 0);
-        this.hookedSurvivorMesh.visible = false;
-        this.hookMesh.add(this.hookedSurvivorMesh);
-    }
-
-    setLiferaftMission(mission) {
-        this.liferaftMissionRef = mission;
     }
 
     toggle() {
@@ -131,6 +99,22 @@ export class WinchSystem {
             return;
         }
 
+        // Check if currently deployed -> initiate retraction
+        if (this.playerRef && this.playerRef.winchState === 'DEPLOYED') {
+            this.isActive = false;
+            this.isDescendingForWinch = false;
+            this.targetExtension = 0.0;
+            if (this.playerRef && this.playerRef.audioManager) {
+                this.playerRef.audioManager.startWinch();
+            }
+            if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
+                this.playerRef.startRetraction();
+            }
+            console.log("Winch System: Retracting cable before climbing...");
+            return;
+        }
+
+        // Otherwise if stowed -> deploy
         this.isActive = !this.isActive;
 
         if (this.isActive) {
@@ -141,16 +125,6 @@ export class WinchSystem {
                 this.playerRef.setWinchMode(true);
             }
             console.log("Winch System: Descending to winch height first... ⚓");
-        } else {
-            this.isDescendingForWinch = false;
-            this.targetExtension = 0.0;
-            if (this.playerRef && this.playerRef.audioManager) {
-                this.playerRef.audioManager.startWinch();
-            }
-            if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
-                this.playerRef.startRetraction();
-            }
-            console.log("Winch System: Retracting cable before climbing...");
         }
     }
 
@@ -201,15 +175,9 @@ export class WinchSystem {
             this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
         }
 
-        if (!this.isActive && this.currentExtension < 0.01) {
-            if (this.hasHookedSurvivor) {
-                this.hasHookedSurvivor = false;
-                this.hookedSurvivorMesh.visible = false;
-                if (this.liferaftMissionRef) {
-                    this.liferaftMissionRef.setSurvivorRescued(true);
-                }
-            }
-            if (this.playerRef && typeof this.playerRef.finishRetraction === 'function') {
+        // Notify player when cable is fully retracted so it can start climbing
+        if (this.playerRef && this.playerRef.winchState === 'RAISING' && this.currentExtension < 0.01) {
+            if (typeof this.playerRef.finishRetraction === 'function') {
                 this.playerRef.finishRetraction();
             }
         }
@@ -305,29 +273,11 @@ export class WinchSystem {
             if (this.currentExtension > 0.99) {
                 this.hookWorldPos.y = Math.max(0.0, this.hookWorldPos.y);
             }
-
-            if (this.isActive && this.currentExtension > 0.95 && this.liferaftMissionRef && !this.hasHookedSurvivor && !this.liferaftMissionRef.isRescued) {
-                const survivorPos = this.liferaftMissionRef.getSurvivorWorldPosition();
-                const dist = this.hookWorldPos.distanceTo(survivorPos);
-                if (dist < 4.5) {
-                    this.hasHookedSurvivor = true;
-                    this.hookedSurvivorMesh.visible = true;
-                    if (this.liferaftMissionRef) {
-                        this.liferaftMissionRef.setSurvivorRescued(true);
-                    }
-                    if (this.socket) {
-                        this.socket.emit('survivor-hooked');
-                    }
-                    console.log("🪝 Winch hook latched onto survivor! Retracting...");
-                    this.toggle();
-                }
-            }
         }
 
         this.hookMesh.position.copy(this.hookWorldPos);
         if (cameraQuaternion) {
             this.hookMesh.quaternion.copy(cameraQuaternion);
-            this.hookedSurvivorMesh.quaternion.copy(cameraQuaternion);
         }
 
         const positions = this.cableLine.geometry.attributes.position.array;

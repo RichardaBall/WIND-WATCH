@@ -166,7 +166,7 @@ export class HelicopterPlayer {
 
         this.group.position.set(0, 6, 0);
         this.targetPosition = new THREE.Vector3(0, 6, 0);
-        this.speed = 25.0;
+        this.speed = 37.5;
         this.isMoving = false;
 
         this.engineState = 'OFF'; 
@@ -204,6 +204,13 @@ export class HelicopterPlayer {
         this.winchTimer = 0;
         this.currentFrame = 5;
         this.verticalVelocity = 0;
+
+        if (this.helicopterSystems) {
+            this.helicopterSystems.fuel = this.helicopterSystems.maxFuel;
+            this.helicopterSystems.water = this.helicopterSystems.maxWater;
+            this.helicopterSystems.lowFuelTriggered = false;
+        }
+
         if (this.gearDownTex && this.material) {
             this.material.map = this.gearDownTex;
             this.material.map.offset.x = 5 * (1 / this.totalFrames);
@@ -279,7 +286,7 @@ export class HelicopterPlayer {
         const padCenter = new THREE.Vector2(0, 0);
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
         const distanceFromBase = pos2D.distanceTo(padCenter);
-        const isOverOcean = distanceFromBase > 5.0; // If outside 5 units, treat as over ocean / water
+        const isOverOcean = distanceFromBase > 5.0;
 
         this.engineState = 'SHUTTING_DOWN';
         
@@ -327,13 +334,13 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
-        // Prevent movement controls strictly during LOWERING or RAISING winch operations
+        // Only block controls strictly during LOWERING or RAISING. Movement and destination clicks are allowed during CLIMBING.
         if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
             return;
         }
 
-        const currentTargetAlt = (this.winchState === 'STOWED' || this.winchState === 'CLIMBING') ? 32.0 : 12.0;
-        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - currentTargetAlt) > 15.0) {
+        const currentTargetAlt = (this.winchState === 'STOWED') ? 32.0 : 12.0;
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - currentTargetAlt) > 20.0) {
             return;
         }
 
@@ -465,7 +472,6 @@ export class HelicopterPlayer {
         this.verticalVelocity += (altitudeError * verticalAccel - this.verticalVelocity * verticalDamping) * delta;
         currentPos.y += this.verticalVelocity * delta;
 
-        // Smoothly glide horizontal position toward helipad center during shutdown only if within the 5.0 unit radius
         if (this.engineState === 'SHUTTING_DOWN' && distanceFromBase < 5.0) {
             currentPos.x = THREE.MathUtils.lerp(currentPos.x, 0.0, delta * 3.0);
             currentPos.z = THREE.MathUtils.lerp(currentPos.z, 0.0, delta * 3.0);
@@ -495,15 +501,6 @@ export class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        const activeCruiseHeight = (this.winchState === 'STOWED' && !this.isWinchActive) ? 32.0 : (this.winchState === 'CLIMBING' ? 32.0 : 12.0);
-        if (this.engineState !== 'RUNNING' || (Math.abs(currentPos.y - activeCruiseHeight) > 2.0 && this.winchState !== 'DESCENDING' && this.winchState !== 'CLIMBING')) {
-            if (this.winchState !== 'LOWERING' && this.winchState !== 'RAISING' && this.engineState !== 'SHUTTING_DOWN') {
-                this.targetPosition.x = currentPos.x;
-                this.targetPosition.z = currentPos.z;
-                this.isMoving = false;
-            }
-        }
-
         if (this.isMoving && this.engineState === 'RUNNING' && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = new THREE.Vector2(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
@@ -512,9 +509,15 @@ export class HelicopterPlayer {
             if (distance > 0.3) {
                 const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
                 const speedMultiplier = isSlow ? 0.5 : 1.0;
-                currentXZ.lerp(targetXZ, delta * 0.8 * speedMultiplier);
                 
                 const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();
+                const step = this.speed * speedMultiplier * delta;
+                
+                if (distance < step) {
+                    currentXZ.copy(targetXZ);
+                } else {
+                    currentXZ.addScaledVector(moveDir, step);
+                }
                 
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;

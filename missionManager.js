@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { LiferaftMission } from './liferaftMission.js';
 
 export class MissionManager {
     constructor(scene, navRadar, windFarm, helicopterSystems, player, camera, searchLightSystem, socket = null) {
@@ -18,19 +17,19 @@ export class MissionManager {
         this.lastMissionKey = null;
 
         this.availableMissions = {
-            'LIFERAFT': (missionData) => {
-                const pos = missionData && missionData.x !== undefined ? new THREE.Vector3(missionData.x, 0.05, missionData.z) : null;
-                const variant = missionData ? missionData.variantIndex : null;
-                const mission = new LiferaftMission(this.scene, this.player, this.navRadar, this.searchLightSystem, pos, variant);
-                if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
-                    this.helicopterSystems.tools['WINCH'].setLiferaftMission(mission);
-                }
-                return mission;
-            },
             'WTG_FIRE': (missionData) => this.createWtgFireMission(missionData)
         };
 
         this.registerPermanentLandmarks();
+
+        // Guaranteed immediate fire mission on game startup
+        this.spawnSpecificMission('WTG_FIRE', {
+            missionId: `local-startup-${Date.now()}`,
+            type: 'WTG_FIRE',
+            turbineIndex: 0,
+            missionStage: 'ACTIVE',
+            progress: 0
+        });
     }
 
     registerPermanentLandmarks() {
@@ -54,18 +53,40 @@ export class MissionManager {
         if (!this.windFarm || this.windFarm.turbines.length === 0) return null;
 
         const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : 0;
-        this.windFarm.setTurbineFire(turbineIndex, true);
+        const alreadyExtinguished = !!(missionData && (missionData.isExtinguished || missionData.isCompleted));
+        
+        // Force-enable fire and sparks immediately
+        this.windFarm.setTurbineFire(turbineIndex, !alreadyExtinguished);
         
         const turbineWorldPos = this.windFarm.getTurbineWorldPosition(turbineIndex);
-        this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
-        console.log(`🔥 Synced Server Mission Spawned: WTG Fire on turbine index ${turbineIndex}!`);
+        if (!alreadyExtinguished) {
+            this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
+        }
+        console.log(`🔥 Active Fire Mission Initialized: WTG Fire on turbine index ${turbineIndex} at (${turbineWorldPos.x.toFixed(1)}, ${turbineWorldPos.z.toFixed(1)})`);
 
-        let extinguishProgress = 0;
+        let extinguishProgress = Math.max(0, Math.min(2, Number(missionData && missionData.progress) * 2 || 0));
+        let serverProgress = missionData && missionData.progress !== undefined ? missionData.progress : 0;
+        let progressSyncTimer = 0;
+        const missionId = missionData && missionData.missionId;
+        let finishedByServer = false;
 
         return {
+            missionId,
+            missionComplete() {
+                finishedByServer = true;
+            },
+            turbineIndex,
+            set serverProgress(val) {
+                serverProgress = val;
+                extinguishProgress = val * 2.0;
+            },
+            get serverProgress() {
+                return serverProgress;
+            },
             update: (delta, playerPosition) => {
+                if (finishedByServer) return false;
                 const isOnFire = this.windFarm.isTurbineOnFire(turbineIndex);
-                if (!isOnFire) {
+                if (!isOnFire || (missionData && missionData.isExtinguished)) {
                     return true;
                 }
 
@@ -73,14 +94,25 @@ export class MissionManager {
                 const dist = playerPosition.distanceTo(turbinePos);
                 const isSprayingWater = this.helicopterSystems.isWaterActive();
 
-                if (dist < 35.0 && isSprayingWater) {
+                if (dist < 75.0 && isSprayingWater) {
                     extinguishProgress += delta;
+                    const percent = Math.min(100, Math.round((extinguishProgress / 2.0) * 100));
+
                     if (extinguishProgress >= 2.0) {
                         this.windFarm.setTurbineFire(turbineIndex, false);
+                        this.navRadar.removeMarker('wind_farm');
+                        if (this.socket && this.socket.connected) {
+                            this.socket.emit('wtg-fire-extinguished', { missionId });
+                        }
                         return true;
                     }
                 } else {
-                    extinguishProgress = Math.max(0, extinguishProgress - delta * 1.5);
+                    extinguishProgress = THREE.MathUtils.lerp(extinguishProgress, serverProgress * 2.0, delta * 5.0);
+                }
+                progressSyncTimer += delta;
+                if (this.socket && this.socket.connected && progressSyncTimer >= 0.2) {
+                    progressSyncTimer = 0;
+                    this.socket.emit('wtg-fire-progress', { missionId, progress: Math.min(0.99, extinguishProgress / 2.0) });
                 }
                 return false;
             },
@@ -102,11 +134,6 @@ export class MissionManager {
             }
         }
         this.navRadar.removeMarker('wind_farm');
-        this.navRadar.removeMarker('liferaft');
-
-        if (this.helicopterSystems && this.helicopterSystems.tools['WINCH']) {
-            this.helicopterSystems.tools['WINCH'].setLiferaftMission(null);
-        }
 
         this.currentMissionInstance = null;
         this.currentMissionKey = null;
@@ -114,28 +141,62 @@ export class MissionManager {
     }
 
     spawnSpecificMission(type, missionData) {
+        if (!missionData) return;
+        
+        // Force all missions to WTG_FIRE since liferaft has been retired
+        const missionType = 'WTG_FIRE';
+
         this.clearAllMissions();
-        this.currentMissionKey = type;
-        this.missionState = 'ACTIVE';
+        this.currentMissionKey = missionType;
+        this.missionState = missionData.missionStage === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE';
 
-        if (this.availableMissions[type]) {
-            this.currentMissionInstance = this.availableMissions[type](missionData);
+        if (this.availableMissions[missionType]) {
+            this.currentMissionInstance = this.availableMissions[missionType](missionData);
+            if (this.currentMissionInstance && missionData) {
+                this.currentMissionInstance.missionId = missionData.missionId;
+                this.currentMissionInstance.serverStage = missionData.missionStage || 'ACTIVE';
+                this.currentMissionInstance.serverProgress = missionData.progress || 0;
+                this.currentMissionInstance.serverIsCompleted = missionData.isCompleted || false;
+                this.currentMissionInstance.serverExtinguishedBy = missionData.extinguishedBy || null;
+            }
         }
-        console.log(`🚀 Server-Authoritative Mission Synchronized: [${type}]`);
+        console.log(`📡 Mission spawned: [${missionType}] ID: ${missionData.missionId}`);
     }
 
-    completeActiveMission() {
-        console.log("🧪 Test Trigger: Forcibly completing current mission...");
-        if (this.socket && this.missionState === 'ACTIVE') {
-            this.missionState = 'COMPLETED';
-            this.socket.emit('complete-mission');
-        } else {
-            this.clearAllMissions();
-        }
-    }
+    applyMissionState(state) {
+        if (!state) return;
 
-    get liferaftMission() {
-        return this.currentMissionKey === 'LIFERAFT' ? this.currentMissionInstance : null;
+        if (state.missionId && this.currentMissionInstance && this.currentMissionInstance.missionId &&
+            state.missionId !== this.currentMissionInstance.missionId) {
+            this.spawnSpecificMission('WTG_FIRE', state);
+            return;
+        }
+
+        if (this.currentMissionKey !== 'WTG_FIRE' || !this.currentMissionInstance) {
+            this.spawnSpecificMission('WTG_FIRE', state);
+            return;
+        }
+
+        if (this.currentMissionInstance) {
+            this.currentMissionInstance.serverStage = state.stage;
+            this.currentMissionInstance.serverProgress = state.progress || 0;
+            this.currentMissionInstance.serverIsCompleted = state.isCompleted || false;
+            this.currentMissionInstance.serverExtinguishedBy = state.extinguishedBy || null;
+
+            if (state.turbineIndex !== undefined) {
+                this.windFarm.setTurbineFire(state.turbineIndex, !state.isExtinguished && !state.isCompleted);
+            }
+
+            if (state.isExtinguished || state.isCompleted) {
+                if (state.turbineIndex !== undefined) {
+                    this.windFarm.setTurbineFire(state.turbineIndex, false);
+                }
+                this.navRadar.removeMarker('wind_farm');
+                this.currentMissionInstance.missionComplete();
+            }
+        }
+
+        this.missionState = state.isCompleted || state.missionStage === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE';
     }
 
     update(delta, playerPosition, nightFactor) {
@@ -175,20 +236,14 @@ export class MissionManager {
 
         if (this.missionState === 'ACTIVE' && this.currentMissionInstance) {
             let isComplete = false;
-
-            if (this.currentMissionKey === 'LIFERAFT') {
-                this.currentMissionInstance.update(delta, this.camera.quaternion, nightFactor, this.searchLightSystem);
-                isComplete = false;
-            } else {
-                isComplete = this.currentMissionInstance.update(delta, playerPosition, nightFactor);
-            }
+            isComplete = this.currentMissionInstance.update(delta, playerPosition, nightFactor);
 
             if (isComplete && this.missionState === 'ACTIVE') {
                 this.missionState = 'COMPLETED';
                 this.lastMissionKey = this.currentMissionKey;
                 console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Notifying server...`);
-                if (this.socket) {
-                    this.socket.emit('complete-mission');
+                if (this.socket && this.socket.connected) {
+                    this.socket.emit('complete-mission', { missionId: this.currentMissionInstance && this.currentMissionInstance.missionId });
                 } else {
                     this.clearAllMissions();
                 }
