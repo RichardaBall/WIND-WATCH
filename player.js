@@ -166,7 +166,8 @@ export class HelicopterPlayer {
 
         this.group.position.set(0, 6, 0);
         this.targetPosition = new THREE.Vector3(0, 6, 0);
-        this.speed = 37.5;
+        this.maxSpeed = 37.5;
+        this.currentSpeed = 0; // Smooth velocity tracking for acceleration/deceleration curves
         this.isMoving = false;
 
         this.engineState = 'OFF'; 
@@ -204,6 +205,7 @@ export class HelicopterPlayer {
         this.winchTimer = 0;
         this.currentFrame = 5;
         this.verticalVelocity = 0;
+        this.currentSpeed = 0;
 
         if (this.helicopterSystems) {
             this.helicopterSystems.fuel = this.helicopterSystems.maxFuel;
@@ -237,6 +239,7 @@ export class HelicopterPlayer {
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
         this.isMoving = false;
+        this.currentSpeed = 0;
         this.verticalVelocity = 0;
         this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
@@ -269,6 +272,7 @@ export class HelicopterPlayer {
             this.winchState = 'RAISING';
             this.targetAltitude = 12.0;
             this.isMoving = false;
+            this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
         }
     }
@@ -297,6 +301,7 @@ export class HelicopterPlayer {
         }
         
         this.isMoving = false;
+        this.currentSpeed = 0;
 
         this.audioManager.playShutdown(() => {
             this.audioManager.stopRotor();
@@ -316,6 +321,7 @@ export class HelicopterPlayer {
             this.engineState = 'STARTING';
             this.targetPosition.copy(this.group.position);
             this.isMoving = false;
+            this.currentSpeed = 0;
             this.flightStarted = true;
             
             this.audioManager.playStartup(() => {
@@ -334,7 +340,6 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
-        // Only block controls strictly during LOWERING or RAISING. Movement and destination clicks are allowed during CLIMBING.
         if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
             return;
         }
@@ -410,23 +415,25 @@ export class HelicopterPlayer {
             this.targetAltitude = 12.0;
             if (Math.abs(this.group.position.y - 12.0) < 1.0) {
                 this.winchState = 'LOWERING';
-                this.winchTimer = 1.5; // duration to lower winch
+                this.winchTimer = 1.5; 
                 this.isMoving = false;
+                this.currentSpeed = 0;
                 this.targetPosition.copy(this.group.position);
             }
         } else if (this.winchState === 'LOWERING') {
             this.targetAltitude = 12.0;
             this.isMoving = false;
+            this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
             this.winchTimer -= delta;
             if (this.winchTimer <= 0) {
-                this.winchState = 'DEPLOYED'; // Winch lowered, player can move again freely at 50% speed
+                this.winchState = 'DEPLOYED'; 
             }
         } else if (this.winchState === 'RAISING') {
             this.targetAltitude = 12.0;
             this.isMoving = false;
+            this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
-            // Handled externally by WinchSystem calling finishRetraction() when cable is fully up
         } else if (this.winchState === 'CLIMBING') {
             this.targetAltitude = 32.0;
             if (Math.abs(this.group.position.y - 32.0) < 1.0) {
@@ -506,15 +513,30 @@ export class HelicopterPlayer {
             const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
 
-            if (distance > 0.3) {
+            if (distance > 0.2) {
                 const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
-                const speedMultiplier = isSlow ? 0.5 : 1.0;
-                
+                const targetMaxSpeed = isSlow ? this.maxSpeed * 0.5 : this.maxSpeed;
+
+                // --- Smooth Acceleration & Deceleration Curve ---
+                // Decelerate smoothly when within 15 units of the target destination
+                let desiredSpeed = targetMaxSpeed;
+                const slowingRadius = 15.0;
+                if (distance < slowingRadius) {
+                    desiredSpeed = targetMaxSpeed * (distance / slowingRadius);
+                    // Ensure a minimum crawling speed so it smoothly touches down on the target
+                    desiredSpeed = Math.max(desiredSpeed, 2.0);
+                }
+
+                // Smoothly accelerate/decelerate current speed toward desired speed
+                const accelerationRate = 25.0; // Higher = faster response, Lower = heavier momentum feel
+                this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, delta * accelerationRate);
+
                 const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();
-                const step = this.speed * speedMultiplier * delta;
+                const step = this.currentSpeed * delta;
                 
                 if (distance < step) {
                     currentXZ.copy(targetXZ);
+                    this.currentSpeed = 0;
                 } else {
                     currentXZ.addScaledVector(moveDir, step);
                 }
@@ -537,7 +559,10 @@ export class HelicopterPlayer {
                 }
             } else {
                 this.isMoving = false;
+                this.currentSpeed = 0;
             }
+        } else {
+            this.currentSpeed = 0;
         }
     }
 

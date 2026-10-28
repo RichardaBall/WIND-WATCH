@@ -58,7 +58,7 @@ export class MissionManager {
         const requiredWaterFraction = missionData && missionData.requiredWaterFraction !== undefined ? missionData.requiredWaterFraction : 1.0;
         
         // Scale total required spray duration to match the randomized water fraction (e.g., max 2 seconds for a full tank)
-        const maxExtinguishTime = Math.max(0.5, requiredWaterFraction * 2.0);
+        const maxExtinguishTime = Math.max(0.5, requiredWaterFraction * 1.0);
         
         // Force-enable fire and sparks immediately
         this.windFarm.setTurbineFire(turbineIndex, !alreadyExtinguished);
