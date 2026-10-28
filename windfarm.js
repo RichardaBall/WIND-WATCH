@@ -1,4 +1,3 @@
-// windfarm.js
 import * as THREE from 'three';
 
 export class WindFarm {
@@ -351,13 +350,13 @@ export class WindFarm {
                 distSq = dx * dx + dz * dz;
             }
 
-            const isVisibleDist = !camPos || distSq < 600 * 600;
+            // --- Distance-Based LOD Scaling Checks ---
+            const isVisibleDist = !camPos || distSq < 500 * 500; // Disable heavy particles beyond 500 units
 
             if (!turbine.isSparking) {
                 turbine.rotor.rotation.z += this.config.speed * delta;
             }
 
-            // Only run foam array updates if within range
             if (isVisibleDist) {
                 turbine.foamParticleSystem.visible = true;
                 for (let i = 0; i < turbine.foamAngles.length; i++) {
@@ -428,6 +427,7 @@ export class WindFarm {
             } else if (turbine.isSparking) {
                 turbine.sparkSystem.visible = false;
                 turbine.stackSystem.visible = false;
+                turbine.sparkLight.intensity = 0.0;
             }
 
             if (cameraQuaternion) {

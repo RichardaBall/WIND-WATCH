@@ -1,4 +1,3 @@
-// server.js
 const http = require('http');
 const { Server } = require('socket.io');
 
@@ -22,10 +21,13 @@ const WTG_FIRE_STAGE = {
 
 function generateRandomMission() {
     const missionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    // Random water requirement between 25% (0.25) and 100% (1.0) of a full tank
+    const requiredWaterFraction = 0.25 + Math.random() * 0.75;
     return {
         missionId,
         type: 'WTG_FIRE',
         turbineIndex: Math.floor(Math.random() * 15),
+        requiredWaterFraction: Number(requiredWaterFraction.toFixed(2)),
         stage: WTG_FIRE_STAGE.EXTINGUISH_FIRE,
         missionStage: MISSION_STAGE.ACTIVE,
         isExtinguished: false,

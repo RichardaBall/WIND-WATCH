@@ -1,4 +1,3 @@
-// winchSystem.js
 import * as THREE from 'three';
 
 export class WinchSystem {
@@ -14,7 +13,7 @@ export class WinchSystem {
         this.localAnchorY = -0.5;
         this.isDescendingForWinch = false;
 
-        // --- Rotor Wash Particle Mist Setup ---
+        // --- Rotor Wash Particle Mist Pool Setup ---
         this.particlesCount = 3000;
         this.washGeometry = new THREE.BufferGeometry();
         this.washPositions = new Float32Array(this.particlesCount * 3);
@@ -99,7 +98,6 @@ export class WinchSystem {
             return;
         }
 
-        // Check if currently deployed -> initiate retraction
         if (this.playerRef && this.playerRef.winchState === 'DEPLOYED') {
             this.isActive = false;
             this.isDescendingForWinch = false;
@@ -110,11 +108,9 @@ export class WinchSystem {
             if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
                 this.playerRef.startRetraction();
             }
-            console.log("Winch System: Retracting cable before climbing...");
             return;
         }
 
-        // Otherwise if stowed -> deploy
         this.isActive = !this.isActive;
 
         if (this.isActive) {
@@ -124,7 +120,6 @@ export class WinchSystem {
             if (this.playerRef && typeof this.playerRef.setWinchMode === 'function') {
                 this.playerRef.setWinchMode(true);
             }
-            console.log("Winch System: Descending to winch height first... ⚓");
         }
     }
 
@@ -150,7 +145,6 @@ export class WinchSystem {
             if (this.playerRef && this.playerRef.audioManager) {
                 this.playerRef.audioManager.stopWinch();
             }
-            console.log("Winch auto-retracted: Landing gear deployed!");
         }
 
         const heliWorldPos = new THREE.Vector3();
@@ -164,7 +158,6 @@ export class WinchSystem {
                 if (this.playerRef && this.playerRef.audioManager) {
                     this.playerRef.audioManager.startWinch();
                 }
-                console.log("Winch System: Reached winch height, now extending cable to sea level ⚓");
             }
         }
 
@@ -175,7 +168,6 @@ export class WinchSystem {
             this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
         }
 
-        // Notify player when cable is fully retracted so it can start climbing
         if (this.playerRef && this.playerRef.winchState === 'RAISING' && this.currentExtension < 0.01) {
             if (typeof this.playerRef.finishRetraction === 'function') {
                 this.playerRef.finishRetraction();

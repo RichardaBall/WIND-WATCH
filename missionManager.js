@@ -27,6 +27,7 @@ export class MissionManager {
             missionId: `local-startup-${Date.now()}`,
             type: 'WTG_FIRE',
             turbineIndex: 0,
+            requiredWaterFraction: 0.5,
             missionStage: 'ACTIVE',
             progress: 0
         });
@@ -54,6 +55,10 @@ export class MissionManager {
 
         const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : 0;
         const alreadyExtinguished = !!(missionData && (missionData.isExtinguished || missionData.isCompleted));
+        const requiredWaterFraction = missionData && missionData.requiredWaterFraction !== undefined ? missionData.requiredWaterFraction : 1.0;
+        
+        // Scale total required spray duration to match the randomized water fraction (e.g., max 2 seconds for a full tank)
+        const maxExtinguishTime = Math.max(0.5, requiredWaterFraction * 2.0);
         
         // Force-enable fire and sparks immediately
         this.windFarm.setTurbineFire(turbineIndex, !alreadyExtinguished);
@@ -62,9 +67,9 @@ export class MissionManager {
         if (!alreadyExtinguished) {
             this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
         }
-        console.log(`🔥 Active Fire Mission Initialized: WTG Fire on turbine index ${turbineIndex} at (${turbineWorldPos.x.toFixed(1)}, ${turbineWorldPos.z.toFixed(1)})`);
+        console.log(`🔥 Active Fire Mission Initialized: WTG Fire on turbine index ${turbineIndex} requiring ${(requiredWaterFraction * 100).toFixed(0)}% tank water at (${turbineWorldPos.x.toFixed(1)}, ${turbineWorldPos.z.toFixed(1)})`);
 
-        let extinguishProgress = Math.max(0, Math.min(2, Number(missionData && missionData.progress) * 2 || 0));
+        let extinguishProgress = Math.max(0, Math.min(maxExtinguishTime, Number(missionData && missionData.progress) * maxExtinguishTime || 0));
         let serverProgress = missionData && missionData.progress !== undefined ? missionData.progress : 0;
         let progressSyncTimer = 0;
         const missionId = missionData && missionData.missionId;
@@ -78,7 +83,7 @@ export class MissionManager {
             turbineIndex,
             set serverProgress(val) {
                 serverProgress = val;
-                extinguishProgress = val * 2.0;
+                extinguishProgress = val * maxExtinguishTime;
             },
             get serverProgress() {
                 return serverProgress;
@@ -96,9 +101,9 @@ export class MissionManager {
 
                 if (dist < 75.0 && isSprayingWater) {
                     extinguishProgress += delta;
-                    const percent = Math.min(100, Math.round((extinguishProgress / 2.0) * 100));
+                    const percent = Math.min(100, Math.round((extinguishProgress / maxExtinguishTime) * 100));
 
-                    if (extinguishProgress >= 2.0) {
+                    if (extinguishProgress >= maxExtinguishTime) {
                         this.windFarm.setTurbineFire(turbineIndex, false);
                         this.navRadar.removeMarker('wind_farm');
                         if (this.socket && this.socket.connected) {
@@ -107,12 +112,12 @@ export class MissionManager {
                         return true;
                     }
                 } else {
-                    extinguishProgress = THREE.MathUtils.lerp(extinguishProgress, serverProgress * 2.0, delta * 5.0);
+                    extinguishProgress = THREE.MathUtils.lerp(extinguishProgress, serverProgress * maxExtinguishTime, delta * 5.0);
                 }
                 progressSyncTimer += delta;
                 if (this.socket && this.socket.connected && progressSyncTimer >= 0.2) {
                     progressSyncTimer = 0;
-                    this.socket.emit('wtg-fire-progress', { missionId, progress: Math.min(0.99, extinguishProgress / 2.0) });
+                    this.socket.emit('wtg-fire-progress', { missionId, progress: Math.min(0.99, extinguishProgress / maxExtinguishTime) });
                 }
                 return false;
             },

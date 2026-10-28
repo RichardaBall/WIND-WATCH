@@ -64,14 +64,14 @@ export class WaterSystem {
             map: texture,
             transparent: true,
             blending: THREE.NormalBlending,
-            depthWrite: false, // Prevent depth sorting issues against other objects
+            depthWrite: false, 
             depthTest: true,
             opacity: this.params.particleOpacity
         });
 
         this.particleSystem = new THREE.Points(this.particleGeometry, this.particleMaterial);
         this.particleSystem.frustumCulled = false;
-        this.particleSystem.renderOrder = 999; // Ensure water renders on top of scene assets
+        this.particleSystem.renderOrder = 999;
         this.scene.add(this.particleSystem);
 
         // --- Surface Impact Splash Setup ---
@@ -95,14 +95,14 @@ export class WaterSystem {
             map: texture,
             transparent: true,
             blending: THREE.NormalBlending,
-            depthWrite: false, // Prevent depth sorting issues
+            depthWrite: false,
             depthTest: true,
             opacity: this.params.splashOpacity
         });
 
         this.splashSystem = new THREE.Points(this.splashGeometry, this.splashMaterial);
         this.splashSystem.frustumCulled = false;
-        this.splashSystem.renderOrder = 999; // Ensure splashes render on top
+        this.splashSystem.renderOrder = 999;
         this.scene.add(this.splashSystem);
         
         this.spawnIndex = 0;
@@ -144,7 +144,6 @@ export class WaterSystem {
         if (this.playerRef && this.playerRef.audioManager) {
             this.playerRef.audioManager.startWaterSpray();
         }
-        console.log("Water Spray: ACTIVE");
     }
 
     stop() {
@@ -152,7 +151,6 @@ export class WaterSystem {
         if (this.playerRef && this.playerRef.audioManager) {
             this.playerRef.audioManager.stopWaterSpray();
         }
-        console.log("Water Spray: OFF");
     }
 
     toggle() {
@@ -169,7 +167,6 @@ export class WaterSystem {
             if (this.playerRef.audioManager) {
                 this.playerRef.audioManager.stopWaterSpray();
             }
-            console.log("Water spray cut off: Landing gear deployed!");
         }
 
         const currentHeliWorldPos = new THREE.Vector3();
@@ -183,7 +180,7 @@ export class WaterSystem {
         const splashPos = this.splashGeometry.attributes.position.array;
         const waterLevel = 0.0;
 
-        // --- Update Falling Shower Particles ---
+        // --- Pooled Update for Falling Shower Particles ---
         for (let i = 0; i < this.particlesCount; i++) {
             const idx = i * 3;
 
@@ -207,7 +204,7 @@ export class WaterSystem {
             }
         }
 
-        // --- Update Surface Splash Particles ---
+        // --- Pooled Update for Surface Splash Particles ---
         for (let i = 0; i < this.splashCount; i++) {
             const idx = i * 3;
             if (this.splashLifetimes[i] > 0) {
@@ -227,7 +224,7 @@ export class WaterSystem {
             }
         }
 
-        // --- Handle Water Discharge Spawning ---
+        // --- Instantaneous Recycling Pool Spawning ---
         if (this.isActive) {
             const spawnBatch = Math.floor(this.params.spawnRate);
             const spawnCenter = currentHeliWorldPos.clone().add(new THREE.Vector3(0, -1.8, 0));
