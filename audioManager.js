@@ -4,6 +4,8 @@ export class AudioManager {
         this.shutdownAudio = new Audio('engineshutdown.mp3');
         this.gearAudio = new Audio('gear.mp3');
         this.lowFuelAudio = new Audio('lowfuel.mp3');
+        this.loadingMusic = new Audio('loadingmusic.mp3');
+        this.loadingMusic.loop = true;
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         this.audioCtx = new AudioContext();
@@ -40,6 +42,31 @@ export class AudioManager {
                 this.rotorBuffer = buffer;
             })
             .catch(e => console.warn("Error loading rotor sound buffer:", e));
+    }
+
+    playLoadingMusic() {
+        if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        this.loadingMusic.currentTime = 0;
+        this.loadingMusic.volume = 1.0;
+        this.loadingMusic.play().catch(e => console.log("Loading music play prevented:", e));
+    }
+
+    fadeOutLoadingMusic(duration = 1.0) {
+        if (this.loadingMusic.paused) return;
+        const steps = 20;
+        const stepTime = (duration * 1000) / steps;
+        const volumeStep = this.loadingMusic.volume / steps;
+
+        const fadeInterval = setInterval(() => {
+            if (this.loadingMusic.volume > volumeStep) {
+                this.loadingMusic.volume -= volumeStep;
+            } else {
+                this.loadingMusic.volume = 0;
+                this.loadingMusic.pause();
+                this.loadingMusic.currentTime = 0;
+                clearInterval(fadeInterval);
+            }
+        }, stepTime);
     }
 
     playStartup(onBlendingPoint, onEnded) {
@@ -237,7 +264,6 @@ export class AudioManager {
 
                 this.rainGainNode = this.audioCtx.createGain();
                 this.rainGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
-                // Subtle background volume (0.06 instead of loud 0.28)
                 this.rainGainNode.gain.linearRampToValueAtTime(0.06, this.audioCtx.currentTime + 0.5);
 
                 this.rainNoiseSource.connect(filter);
@@ -292,7 +318,6 @@ export class AudioManager {
 
                 this.windGainNode = this.audioCtx.createGain();
                 this.windGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
-                // Subtle background volume (capped low)
                 this.windGainNode.gain.linearRampToValueAtTime(Math.min(0.08, volume), this.audioCtx.currentTime + 0.5);
 
                 this.windNoiseSource.connect(filter);

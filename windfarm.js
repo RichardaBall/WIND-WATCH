@@ -1,3 +1,4 @@
+// windfarm.js
 import * as THREE from 'three';
 
 export class WindFarm {
@@ -9,7 +10,6 @@ export class WindFarm {
 
         this.turbines = [];
 
-        // Turbine configuration values
         this.config = {
             speed: 2.3,
             length: 14.0,
@@ -19,7 +19,6 @@ export class WindFarm {
             hubZ: 0.8
         };
 
-        // Hardcoded foam ring configuration
         this.foamConfig = {
             radius: 1.0,
             thickness: 2.0,
@@ -33,7 +32,6 @@ export class WindFarm {
             speed: 0.2
         };
 
-        // Hardcoded light configuration
         this.lightConfig = {
             x: 1.0,
             y: 22.2,
@@ -41,7 +39,6 @@ export class WindFarm {
             scale: 0.05
         };
 
-        // Hardcoded Sparks & Smoke Stack parameters
         this.fxParams = {
             sparkSize: 3,
             sparkSpeed: 10,
@@ -62,19 +59,15 @@ export class WindFarm {
             this.bodyMaterial.needsUpdate = true;
         });
 
-        // Single large wind farm layout: Exactly 20 WTGs positioned radially/grid-wise around (0,0) where the main base is located
         const farmLayout = [
-            // Inner Ring (Radius ~150 units)
             { x: 150, z: 0 },   { x: -150, z: 0 },  { x: 0, z: 150 },   { x: 0, z: -150 },
             { x: 106, z: 106 }, { x: -106, z: 106 },{ x: 106, z: -106 }, { x: -106, z: -106 },
-
-            // Outer Ring (Radius ~300 units)
             { x: 300, z: 0 },   { x: -300, z: 0 },  { x: 0, z: 300 },   { x: 0, z: -300 },
             { x: 212, z: 212 }, { x: -212, z: 212 },{ x: 212, z: -212 }, { x: -212, z: -212 },
             { x: 300, z: 150 }, { x: -300, z: 150 },{ x: 150, z: 300 },  { x: -150, z: 300 }
         ];
 
-        farmLayout.forEach((pos, index) => {
+        farmLayout.forEach((pos) => {
             this.createTurbine(pos.x, pos.z, false);
         });
     }
@@ -307,6 +300,7 @@ export class WindFarm {
             foamPositions: foamPositions,
             foamAngles: foamAngles,
             foamOffsets: foamOffsets,
+            foamParticleSystem: foamParticleSystem,
             pointLight: pointLight,
             sparkSystem: sparkSystem,
             sparkMaterial: sparkMaterial,
@@ -357,11 +351,15 @@ export class WindFarm {
                 distSq = dx * dx + dz * dz;
             }
 
+            const isVisibleDist = !camPos || distSq < 600 * 600;
+
             if (!turbine.isSparking) {
                 turbine.rotor.rotation.z += this.config.speed * delta;
             }
 
-            if (!camPos || distSq < 800 * 800) {
+            // Only run foam array updates if within range
+            if (isVisibleDist) {
+                turbine.foamParticleSystem.visible = true;
                 for (let i = 0; i < turbine.foamAngles.length; i++) {
                     const idx = i * 3;
                     const angle = turbine.foamAngles[i];
@@ -379,9 +377,13 @@ export class WindFarm {
                     turbine.foamPositions[idx + 2] = z;
                 }
                 turbine.foamGeometry.attributes.position.needsUpdate = true;
+            } else {
+                turbine.foamParticleSystem.visible = false;
             }
 
-            if (turbine.isSparking && (!camPos || distSq < 600 * 600)) {
+            if (turbine.isSparking && isVisibleDist) {
+                turbine.sparkSystem.visible = true;
+                turbine.stackSystem.visible = true;
                 turbine.sparkLight.intensity = Math.random() > 0.3 ? 6.0 : 0.5;
 
                 const sparkPos = turbine.sparkSystem.geometry.attributes.position.array;
@@ -423,6 +425,9 @@ export class WindFarm {
                     }
                 }
                 turbine.stackSystem.geometry.attributes.position.needsUpdate = true;
+            } else if (turbine.isSparking) {
+                turbine.sparkSystem.visible = false;
+                turbine.stackSystem.visible = false;
             }
 
             if (cameraQuaternion) {

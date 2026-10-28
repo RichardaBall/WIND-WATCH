@@ -33,7 +33,7 @@ const player = new HelicopterPlayer(scene);
 const weatherSystem = new WeatherSystem(scene, camera, ocean, player.audioManager);
 
 const helicopterSystems = new HelicopterSystems(scene, player.group, player);
-player.helicopterSystems = helicopterSystems; // Link helicopter systems reference to player for resets
+player.helicopterSystems = helicopterSystems;
 
 const searchLightSystem = new SearchLightSystem(scene, player.group);
 const navRadar = new NavRadar(scene, player, camera);
@@ -46,12 +46,39 @@ const settings = setupSettings(dayNightCycle, player, weatherSystem, missionMana
 const inputManager = new InputManager(camera, player, helicopterSystems, searchLightSystem, dayNightCycle);
 
 const remotePlayers = {};
+let lastSentPos = new THREE.Vector3();
 
 function spawnRemotePlayer(id, data) {
     const remoteHeli = new HelicopterPlayer(scene);
     const remotePlayerRef = { gearDown: data.gearDown ?? true };
     const remoteWaterSystem = new WaterSystem(scene, remoteHeli.group, remotePlayerRef);
     const remoteWinchSystem = new WinchSystem(scene, remoteHeli.group, remotePlayerRef);
+
+    // --- Remote Helicopter Shadow Setup ---
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = 64;
+    shadowCanvas.height = 64;
+    const sCtx = shadowCanvas.getContext('2d');
+    const sGrad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.35)');
+    sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.15)');
+    sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    sCtx.fillStyle = sGrad;
+    sCtx.fillRect(0, 0, 64, 64);
+
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    const shadowGeo = new THREE.PlaneGeometry(10, 10);
+    const shadowMat = new THREE.MeshBasicMaterial({
+        map: shadowTexture,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false
+    });
+    const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+    shadowMesh.rotation.x = -Math.PI / 2;
+    shadowMesh.position.set(data.x, 0.2, data.z);
+    scene.add(shadowMesh);
+    // ------------------------------------
 
     const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
     searchLight.position.set(0, -0.5, 0);
@@ -95,6 +122,7 @@ function spawnRemotePlayer(id, data) {
         searchLight: searchLight,
         searchLightTarget: searchLightTarget,
         lightPoolMesh: lightPoolMesh,
+        shadowMesh: shadowMesh,
         targetPos: new THREE.Vector3(data.x, data.y, data.z),
         targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
         targetFrame: data.currentFrame || 5,
@@ -186,6 +214,7 @@ socket.on('remote-player-update', (data) => {
 socket.on('player-disconnected', (id) => {
     if (remotePlayers[id]) {
         scene.remove(remotePlayers[id].group);
+        if (remotePlayers[id].shadowMesh) scene.remove(remotePlayers[id].shadowMesh);
         if (remotePlayers[id].winchSystem && remotePlayers[id].winchSystem.cableLine) {
             scene.remove(remotePlayers[id].winchSystem.cableLine);
             scene.remove(remotePlayers[id].winchSystem.hookMesh);
@@ -250,31 +279,46 @@ function animate() {
         networkTimer = 0;
         const pos = player.getPosition();
 
-        socket.emit('player-update', {
-            x: pos.x,
-            y: pos.y,
-            z: pos.z,
-            currentFrame: player.currentFrame,
-            rotorSpeed: player.rotorSpeed,
-            gearDown: player.gearDown,
-            qx: player.mesh.quaternion.x,
-            qy: player.mesh.quaternion.y,
-            qz: player.mesh.quaternion.z,
-            qw: player.mesh.quaternion.w,
-            winchState: player.winchState,
-            isDroppingWater: helicopterSystems.isWaterActive(),
-            searchLightState: searchLightSystem.state,
-            slX: searchLightSystem.lightTarget.position.x,
-            slY: searchLightSystem.lightTarget.position.y,
-            slZ: searchLightSystem.lightTarget.position.z
-        });
+        // Delta check to avoid broadcasting idle position ticks
+        if (pos.distanceToSquared(lastSentPos) > 0.001 || player.isMoving) {
+            lastSentPos.copy(pos);
+            socket.emit('player-update', {
+                x: pos.x,
+                y: pos.y,
+                z: pos.z,
+                currentFrame: player.currentFrame,
+                rotorSpeed: player.rotorSpeed,
+                gearDown: player.gearDown,
+                qx: player.mesh.quaternion.x,
+                qy: player.mesh.quaternion.y,
+                qz: player.mesh.quaternion.z,
+                qw: player.mesh.quaternion.w,
+                winchState: player.winchState,
+                isDroppingWater: helicopterSystems.isWaterActive(),
+                searchLightState: searchLightSystem.state,
+                slX: searchLightSystem.lightTarget.position.x,
+                slY: searchLightSystem.lightTarget.position.y,
+                slZ: searchLightSystem.lightTarget.position.z
+            });
+        }
     }
 
     for (const id in remotePlayers) {
         const rp = remotePlayers[id];
         rp.group.position.lerp(rp.targetPos, delta * 10.0);
         rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
-        rp.group.updateMatrixWorld(true); // Ensure world position matrix is fresh for child systems
+        
+        // Update shadow position and height-based scaling
+        if (rp.shadowMesh) {
+            rp.shadowMesh.position.set(rp.group.position.x, 0.2, rp.group.position.z);
+            const heightFactor = Math.max(0.4, 1.0 - (rp.group.position.y / 60.0));
+            rp.shadowMesh.scale.set(heightFactor, heightFactor, heightFactor);
+        }
+
+        // Only trigger heavy matrix updates when player is moving
+        if (rp.group.position.distanceToSquared(rp.targetPos) > 0.01) {
+            rp.group.updateMatrixWorld(true);
+        }
 
         if (rp.helicopter && rp.helicopter.rotorBlades) {
             for (const blade of rp.helicopter.rotorBlades) {
@@ -350,6 +394,11 @@ function animate() {
 animate();
 
 window.addEventListener('start-loading-game', () => {
+    // Play loading music when the loading sequence starts
+    if (player && player.audioManager) {
+        player.audioManager.playLoadingMusic();
+    }
+
     const progressBar = document.getElementById('loading-progress');
     const loadingStatus = document.getElementById('loading-status');
     const loadingScreen = document.getElementById('loading-screen');
@@ -365,6 +414,12 @@ window.addEventListener('start-loading-game', () => {
         if (progress >= 100) {
             clearInterval(interval);
             if (loadingStatus) loadingStatus.innerText = 'Ready! Launching flight...';
+            
+            // Fade out loading music smoothly over 1 second when ready
+            if (player && player.audioManager) {
+                player.audioManager.fadeOutLoadingMusic(1.0);
+            }
+
             setTimeout(() => {
                 if (loadingScreen) {
                     loadingScreen.style.opacity = '0';

@@ -8,10 +8,6 @@ const io = new Server(server, { cors: { origin: "*" } });
 let activePlayers = {};
 let worldState = { timeOfDay: 0.25, weather: 'CLEAR', cloudSeed: 123456 };
 
-// ============================================
-// SERVER-AUTHORITATIVE MISSION SYSTEM
-// ============================================
-
 const MISSION_STAGE = {
     WAITING: 'WAITING',
     ACTIVE: 'ACTIVE',
@@ -42,7 +38,6 @@ function generateRandomMission() {
 
 let currentMission = generateRandomMission();
 let missionRotationTimer = null;
-console.log(`🎯 Initial server mission generated on startup: [${currentMission.type}] ID: ${currentMission.missionId} (Turbine: ${currentMission.turbineIndex})`);
 
 function broadcastMissionState() {
     io.emit('mission-state-updated', JSON.parse(JSON.stringify(currentMission)));
@@ -79,7 +74,6 @@ function finishMission(reason, socket) {
         reason,
         completedBy: currentMission.completedBy
     });
-    console.log(`Mission ${currentMission.missionId} completed (${reason}) by ${currentMission.completedBy}.`);
 
     if (missionRotationTimer) clearTimeout(missionRotationTimer);
     missionRotationTimer = setTimeout(() => {
@@ -91,11 +85,9 @@ function rotateToNextMission() {
     currentMission = generateRandomMission();
     currentMission.missionStage = MISSION_STAGE.ACTIVE;
     broadcastFullMissionSync();
-    console.log(`🚀 New server-generated mission spawned: ${currentMission.type} (${currentMission.missionId}) on turbine ${currentMission.turbineIndex}`);
 }
 
 io.on('connection', (socket) => {
-    console.log(`Player connected: ${socket.id}`);
     activePlayers[socket.id] = {
         id: socket.id, x: 0, y: 6, z: 0, currentFrame: 5,
         rotorSpeed: 0, gearDown: true, qx: 0, qy: 0, qz: 0, qw: 1,
@@ -110,7 +102,6 @@ io.on('connection', (socket) => {
 
     socket.on('player-update', (data = {}) => {
         if (activePlayers[socket.id]) {
-            // Explicitly allow and update isDroppingWater state tracking
             const allowed = ['x', 'y', 'z', 'currentFrame', 'rotorSpeed', 'gearDown', 'qx', 'qy', 'qz', 'qw', 'winchState', 'isDroppingWater', 'searchLightState', 'slX', 'slY', 'slZ'];
             for (const key of allowed) {
                 if (data[key] !== undefined) {
@@ -118,7 +109,6 @@ io.on('connection', (socket) => {
                 }
             }
         }
-        // Broadcast the update containing isDroppingWater to all other connected clients
         socket.broadcast.emit('remote-player-update', { id: socket.id, ...data });
     });
 
@@ -180,7 +170,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
         delete activePlayers[socket.id];
         io.emit('player-disconnected', socket.id);
     });
