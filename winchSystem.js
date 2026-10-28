@@ -1,3 +1,4 @@
+// winchSystem.js
 import * as THREE from 'three';
 
 export class WinchSystem {
@@ -83,41 +84,48 @@ export class WinchSystem {
     }
 
     toggle() {
-        if (this.playerRef && this.playerRef.gearDown) {
+        if (!this.playerRef) return;
+
+        // Block input spam if currently retracting or climbing out
+        if (this.playerRef.winchState === 'RAISING' || this.playerRef.winchState === 'CLIMBING') {
+            return;
+        }
+
+        if (this.playerRef.gearDown) {
             console.log("Cannot operate winch while landing gear is down!");
             this.isActive = false;
             this.isDescendingForWinch = false;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (this.playerRef && typeof this.playerRef.setWinchMode === 'function') {
+            if (typeof this.playerRef.setWinchMode === 'function') {
                 this.playerRef.setWinchMode(false);
             }
-            if (this.playerRef && this.playerRef.audioManager) {
+            if (this.playerRef.audioManager) {
                 this.playerRef.audioManager.stopWinch();
             }
             return;
         }
 
-        if (this.playerRef && this.playerRef.winchState === 'DEPLOYED') {
+        if (this.playerRef.winchState === 'DEPLOYED') {
             this.isActive = false;
             this.isDescendingForWinch = false;
             this.targetExtension = 0.0;
-            if (this.playerRef && this.playerRef.audioManager) {
+            if (this.playerRef.audioManager) {
                 this.playerRef.audioManager.startWinch();
             }
-            if (this.playerRef && typeof this.playerRef.startRetraction === 'function') {
+            if (typeof this.playerRef.startRetraction === 'function') {
                 this.playerRef.startRetraction();
             }
             return;
         }
 
-        this.isActive = !this.isActive;
-
-        if (this.isActive) {
+        // Only allow deployment if completely stowed
+        if (this.playerRef.winchState === 'STOWED') {
+            this.isActive = true;
             this.isDescendingForWinch = true;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (this.playerRef && typeof this.playerRef.setWinchMode === 'function') {
+            if (typeof this.playerRef.setWinchMode === 'function') {
                 this.playerRef.setWinchMode(true);
             }
         }
@@ -139,10 +147,10 @@ export class WinchSystem {
             this.isDescendingForWinch = false;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (this.playerRef && typeof this.playerRef.setWinchMode === 'function') {
+            if (typeof this.playerRef.setWinchMode === 'function') {
                 this.playerRef.setWinchMode(false);
             }
-            if (this.playerRef && this.playerRef.audioManager) {
+            if (this.playerRef.audioManager) {
                 this.playerRef.audioManager.stopWinch();
             }
         }
