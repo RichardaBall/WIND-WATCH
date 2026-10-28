@@ -58,8 +58,8 @@ export class HudManager {
                     </svg>
                 </button>
 
-                <!-- LIGHT INDICATOR BUTTON -->
-                <button id="hud-light-btn" title="Toggle Searchlight (L)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
+                <!-- LIGHT INDICATOR BUTTON (Hidden by default, can be re-enabled) -->
+                <button id="hud-light-btn" title="Toggle Searchlight (L)" style="display: none; background: transparent; border: none; cursor: pointer; padding: 4px; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="5"></circle>
                         <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -117,6 +117,17 @@ export class HudManager {
                 this.helicopterSystems.setTool(nextTool);
             }
         });
+    }
+
+    // Helper methods to dynamically show or hide the searchlight icon later
+    showSearchlightIcon() {
+        const lightBtn = document.getElementById('hud-light-btn');
+        if (lightBtn) lightBtn.style.display = 'flex';
+    }
+
+    hideSearchlightIcon() {
+        const lightBtn = document.getElementById('hud-light-btn');
+        if (lightBtn) lightBtn.style.display = 'none';
     }
 
     update() {
