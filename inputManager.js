@@ -59,18 +59,14 @@ export class InputManager {
             if (e.code === 'KeyE') {
                 this.player.handleEngineKey();
             }
-            /*
-            if (e.code === 'KeyL') {
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-                const mouseWorldPos = new THREE.Vector3();
-                this.raycaster.ray.intersectPlane(this.planeIntersectTarget, mouseWorldPos);
-                this.searchLightSystem.cycleState(mouseWorldPos);
-            }
-            */
             if (e.code === 'Digit1') {
                 this.helicopterSystems.setTool('WATER');
             }
             if (e.code === 'Digit2') {
+                if (this.helicopterSystems.water >= this.helicopterSystems.maxWater) {
+                    console.log("Water tank is full! Cannot select water fill tool.");
+                    return;
+                }
                 this.helicopterSystems.setTool('WINCH');
             }
             if (e.code === 'Space') {

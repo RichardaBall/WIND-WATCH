@@ -43,6 +43,12 @@ export class HelicopterSystems {
             return;
         }
 
+        // Prevent selecting winch (water fill) if water tank is already full
+        if (toolKey === 'WINCH' && this.water >= this.maxWater) {
+            console.log("Water tank is already full! Water fill cannot be selected.");
+            return;
+        }
+
         if (this.tools[toolKey]) {
             if (this.activeToolKey === 'WATER' && toolKey !== 'WATER') {
                 this.tools['WATER'].stop();
@@ -96,6 +102,12 @@ export class HelicopterSystems {
         const isWinchAtSeaLevel = winchTool && winchTool.isActive && winchTool.currentExtension > 0.95 && winchTool.hookWorldPos.y <= 0.5;
         if (isWinchAtSeaLevel) {
             this.water = Math.min(this.maxWater, this.water + delta * 30);
+        }
+
+        // Global check: If water tank is full, ensure we are not stuck in water fill mode
+        if (this.water >= this.maxWater && this.activeToolKey === 'WINCH') {
+            console.log("Water tank full! Switching back to water drop mode.");
+            this.setTool('WATER');
         }
 
         // Deplete fuel only when the engine state is RUNNING

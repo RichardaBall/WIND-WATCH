@@ -113,8 +113,16 @@ export class HudManager {
 
         document.getElementById('hud-tool-btn').addEventListener('click', () => {
             if (this.helicopterSystems) {
-                const nextTool = this.helicopterSystems.activeToolKey === 'WATER' ? 'WINCH' : 'WATER';
-                this.helicopterSystems.setTool(nextTool);
+                const isWaterFull = this.helicopterSystems.water >= this.helicopterSystems.maxWater;
+                if (this.helicopterSystems.activeToolKey === 'WATER') {
+                    if (isWaterFull) {
+                        console.log("Water tank is full! Cannot select water fill tool.");
+                        return;
+                    }
+                    this.helicopterSystems.setTool('WINCH');
+                } else {
+                    this.helicopterSystems.setTool('WATER');
+                }
             }
         });
     }
