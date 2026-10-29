@@ -23,6 +23,11 @@ export class Game {
     constructor() {
         this.remotePlayers = {};
         this.lastSentPos = new THREE.Vector3();
+        this.lastSentRotorSpeed = -1;
+        this.lastSentGearDown = null;
+        this.lastSentWinchState = null;
+        this.lastSentWaterActive = null;
+        this.lastSentLightState = null;
         this.clock = new THREE.Clock();
         this.networkTimer = 0;
         this.logicThrottleTimer = 0;
@@ -153,7 +158,7 @@ export class Game {
             targetPos: new THREE.Vector3(data.x, data.y, data.z),
             targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
             targetFrame: data.currentFrame || 5,
-            rotorSpeed: data.rotorSpeed || 0,
+            rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
             gearDown: data.gearDown ?? true,
             winchState: data.winchState || 'STOWED',
             isDroppingWater: data.isDroppingWater || false,
@@ -183,7 +188,7 @@ export class Game {
                 rp.targetPos.set(data.x, data.y, data.z);
                 rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
                 rp.targetFrame = data.currentFrame;
-                rp.rotorSpeed = data.rotorSpeed;
+                rp.rotorSpeed = data.rotorSpeed !== undefined ? data.rotorSpeed : 0;
                 rp.gearDown = data.gearDown;
                 if (rp.playerRef) {
                     rp.playerRef.gearDown = data.gearDown;
@@ -322,23 +327,42 @@ export class Game {
         if (this.networkTimer >= 0.05) {
             this.networkTimer = 0;
             const pos = this.player.getPosition();
+            const currentRotorSpeed = this.player.rotorSpeed;
+            const currentGearDown = this.player.gearDown;
+            const currentWinchState = this.player.winchState;
+            const currentWaterActive = this.helicopterSystems.isWaterActive();
+            const currentLightState = this.searchLightSystem.state;
 
-            if (pos.distanceToSquared(this.lastSentPos) > 0.001 || this.player.isMoving) {
+            const hasMoved = pos.distanceToSquared(this.lastSentPos) > 0.001 || this.player.isMoving;
+            const stateChanged = 
+                Math.abs(currentRotorSpeed - this.lastSentRotorSpeed) > 0.1 ||
+                currentGearDown !== this.lastSentGearDown ||
+                currentWinchState !== this.lastSentWinchState ||
+                currentWaterActive !== this.lastSentWaterActive ||
+                currentLightState !== this.lastSentLightState;
+
+            if (hasMoved || stateChanged) {
                 this.lastSentPos.copy(pos);
+                this.lastSentRotorSpeed = currentRotorSpeed;
+                this.lastSentGearDown = currentGearDown;
+                this.lastSentWinchState = currentWinchState;
+                this.lastSentWaterActive = currentWaterActive;
+                this.lastSentLightState = currentLightState;
+
                 this.networkManager.emit('player-update', {
                     x: pos.x,
                     y: pos.y,
                     z: pos.z,
                     currentFrame: this.player.currentFrame,
-                    rotorSpeed: this.player.rotorSpeed,
-                    gearDown: this.player.gearDown,
+                    rotorSpeed: currentRotorSpeed,
+                    gearDown: currentGearDown,
                     qx: this.player.mesh.quaternion.x,
                     qy: this.player.mesh.quaternion.y,
                     qz: this.player.mesh.quaternion.z,
                     qw: this.player.mesh.quaternion.w,
-                    winchState: this.player.winchState,
-                    isDroppingWater: this.helicopterSystems.isWaterActive(),
-                    searchLightState: this.searchLightSystem.state,
+                    winchState: currentWinchState,
+                    isDroppingWater: currentWaterActive,
+                    searchLightState: currentLightState,
                     slX: this.searchLightSystem.lightTarget.position.x,
                     slY: this.searchLightSystem.lightTarget.position.y,
                     slZ: this.searchLightSystem.lightTarget.position.z
@@ -361,9 +385,12 @@ export class Game {
                 rp.group.updateMatrixWorld(true);
             }
 
-            if (rp.helicopter && rp.helicopter.rotorBlades) {
-                for (const blade of rp.helicopter.rotorBlades) {
-                    blade.rotation.z += rp.rotorSpeed * delta;
+    // Remote rotor rotation update
+            if (rp.rotorSpeed > 0) {
+                if (rp.helicopter && rp.helicopter.rotorBlades) {
+                    for (const blade of rp.helicopter.rotorBlades) {
+                        blade.rotation.z += rp.rotorSpeed * delta;
+                    }
                 }
             }
 
