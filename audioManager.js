@@ -534,6 +534,62 @@ export class AudioManager {
         }
     }
 
+    // --- PROXIMITY AUDIO METHODS FOR REMOTE PLAYERS ---
+    createRemoteRotorSource() {
+        if (!this.audioCtx || !this.rotorBuffer) return null;
+        try {
+            const source = this.audioCtx.createBufferSource();
+            source.buffer = this.rotorBuffer;
+            source.loop = true;
+
+            const panner = this.audioCtx.createPanner();
+            panner.panningModel = 'HRTF';
+            panner.distanceModel = 'inverse';
+            panner.refDistance = 20;     // Distance where volume starts reducing
+            panner.maxDistance = 500;    // Max distance you can hear them from
+            panner.rolloffFactor = 1.5;  // How fast sound drops off with distance
+
+            const gainNode = this.audioCtx.createGain();
+            gainNode.gain.setValueAtTime(1.5, this.audioCtx.currentTime);
+
+            source.connect(panner);
+            panner.connect(gainNode);
+            gainNode.connect(this.audioCtx.destination);
+
+            source.start(0);
+
+            return { source, panner, gainNode };
+        } catch (e) {
+            console.warn("Error creating remote rotor audio source:", e);
+            return null;
+        }
+    }
+
+    updateRemoteRotorPosition(remoteAudioObj, x, y, z) {
+        if (remoteAudioObj && remoteAudioObj.panner && this.audioCtx) {
+            const panner = remoteAudioObj.panner;
+            const now = this.audioCtx.currentTime;
+            if (panner.positionX) {
+                panner.positionX.setTargetAtTime(x, now, 0.05);
+                panner.positionY.setTargetAtTime(y, now, 0.05);
+                panner.positionZ.setTargetAtTime(z, now, 0.05);
+            } else {
+                panner.setPosition(x, y, z);
+            }
+        }
+    }
+
+    stopRemoteRotor(remoteAudioObj) {
+        if (remoteAudioObj && remoteAudioObj.source) {
+            try {
+                remoteAudioObj.source.stop();
+                remoteAudioObj.source.disconnect();
+                remoteAudioObj.panner.disconnect();
+                remoteAudioObj.gainNode.disconnect();
+            } catch (e) {}
+        }
+    }
+
     getStartupDuration() {
         return this.startupAudio.duration;
     }

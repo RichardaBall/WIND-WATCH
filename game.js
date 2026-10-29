@@ -88,6 +88,9 @@ export class Game {
         const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
         const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef);
 
+        // --- Initialize Proximity Audio Source ---
+        const remoteAudio = this.player.audioManager.createRemoteRotorSource();
+
         const shadowCanvas = document.createElement('canvas');
         shadowCanvas.width = 64;
         shadowCanvas.height = 64;
@@ -151,6 +154,7 @@ export class Game {
             waterSystem: remoteWaterSystem,
             winchSystem: remoteWinchSystem,
             playerRef: remotePlayerRef,
+            remoteAudio: remoteAudio,
             searchLight: searchLight,
             searchLightTarget: searchLightTarget,
             lightPoolMesh: lightPoolMesh,
@@ -225,6 +229,11 @@ export class Game {
 
         this.networkManager.on('player-disconnected', (id) => {
             if (this.remotePlayers[id]) {
+                // --- Stop and Clean Up Proximity Audio ---
+                if (this.remotePlayers[id].remoteAudio) {
+                    this.player.audioManager.stopRemoteRotor(this.remotePlayers[id].remoteAudio);
+                }
+
                 this.scene.remove(this.remotePlayers[id].group);
                 if (this.remotePlayers[id].shadowMesh) this.scene.remove(this.remotePlayers[id].shadowMesh);
                 if (this.remotePlayers[id].winchSystem && this.remotePlayers[id].winchSystem.cableLine) {
@@ -375,6 +384,15 @@ export class Game {
             rp.group.position.lerp(rp.targetPos, delta * 10.0);
             rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
             
+            // --- Update Proximity Audio Position and Volume ---
+            if (rp.remoteAudio && this.player.audioManager.audioCtx) {
+                const pos = rp.group.position;
+                this.player.audioManager.updateRemoteRotorPosition(rp.remoteAudio, pos.x, pos.y, pos.z);
+                
+                const targetGain = rp.rotorSpeed > 5 ? 1.5 : 0.0;
+                rp.remoteAudio.gainNode.gain.setTargetAtTime(targetGain, this.player.audioManager.audioCtx.currentTime, 0.1);
+            }
+
             if (rp.shadowMesh) {
                 rp.shadowMesh.position.set(rp.group.position.x, 0.2, rp.group.position.z);
                 const heightFactor = Math.max(0.4, 1.0 - (rp.group.position.y / 60.0));
