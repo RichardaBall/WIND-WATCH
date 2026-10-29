@@ -26,10 +26,6 @@ export class NetworkManager {
             if (this.callbacks['player-joined']) this.callbacks['player-joined'](playerData);
         });
 
-        this.socket.on('sync-world', (worldData) => {
-            if (this.callbacks['sync-world']) this.callbacks['sync-world'](worldData);
-        });
-
         this.socket.on('remote-player-update', (data) => {
             if (this.callbacks['remote-player-update']) this.callbacks['remote-player-update'](data);
         });

@@ -62,6 +62,14 @@ export class Game {
         this.helicopterSystems.tools['WINCH'].socket = this.networkManager.socket;
         this.missionManager.socket = this.networkManager.socket;
 
+        // Expose testing/debugging hooks to window for console overrides
+        window.testEnv = {
+            setWeather: (type) => this.weatherSystem.setWeatherOverride(type),
+            clearWeather: () => this.weatherSystem.clearWeatherOverride(),
+            setTime: (fraction0to1) => this.dayNightCycle.setTimeOverride(fraction0to1), // e.g. 0.25 = noon, 0.75 = midnight
+            clearTime: () => this.dayNightCycle.clearTimeOverride()
+        };
+
         this.initNetworkCallbacks();
         this.initEventListeners();
 
@@ -167,18 +175,6 @@ export class Game {
 
         this.networkManager.on('player-joined', (playerData) => {
             this.spawnRemotePlayer(playerData.id, playerData);
-        });
-
-        this.networkManager.on('sync-world', (worldData) => {
-            if (worldData.timeOfDay !== undefined && this.dayNightCycle) {
-                this.dayNightCycle.timeOfDay = worldData.timeOfDay;
-            }
-            if (worldData.weather !== undefined && this.weatherSystem) {
-                this.weatherSystem.setWeather(worldData.weather);
-            }
-            if (worldData.cloudSeed !== undefined && this.cloudSystem) {
-                this.cloudSystem.setSeed(worldData.cloudSeed);
-            }
         });
 
         this.networkManager.on('remote-player-update', (data) => {

@@ -11,6 +11,10 @@ export class DayNightCycle {
         this.timeScale = 1.0; 
         this.paused = false;
 
+        // Testing override properties
+        this.useOverride = false;
+        this.overrideTime = 0.25;
+
         // Full cycle = 10 minutes (600 seconds) -> 5 mins day, 5 mins night
         this.baseSpeed = 1.0 / 600.0;
 
@@ -30,20 +34,31 @@ export class DayNightCycle {
         this.scene.add(this.moonMesh);
     }
 
+    // Methods for testing time overrides
+    setTimeOverride(val) {
+        this.overrideTime = THREE.MathUtils.clamp(val, 0, 1);
+        this.useOverride = true;
+    }
+
+    clearTimeOverride() {
+        this.useOverride = false;
+    }
+
     setTimeOfDay(val) {
-        this.timeOfDay = val;
-        this.paused = true;
+        this.setTimeOverride(val);
     }
 
     toggleTimelapse() {
         this.timeScale = this.timeScale === 1.0 ? 100.0 : 1.0;
-        this.paused = false; // Resume if it was paused by manual setting overrides
+        this.paused = false; 
         return this.timeScale === 100.0;
     }
 
     update(delta) {
-        if (!this.paused) {
-            this.timeOfDay = (this.timeOfDay + delta * this.baseSpeed * this.timeScale) % 1.0;
+        if (this.useOverride) {
+            this.timeOfDay = this.overrideTime;
+        } else {
+            this.timeOfDay = (Date.now() % 600000) / 600000;
         }
 
         const angle = this.timeOfDay * Math.PI * 2;
@@ -73,12 +88,10 @@ export class DayNightCycle {
             this.scene.fog.color.copy(this.scene.background);
         }
 
-        // Update ocean night overlay
         if (this.ocean) {
             this.ocean.updateLighting(nightFactor);
         }
 
-        // Hide celestial bodies when below horizon
         this.sunMesh.visible = sunY > -30;
         this.moonMesh.visible = moonY > -30;
 

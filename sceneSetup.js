@@ -4,7 +4,8 @@ import * as THREE from 'three';
 export function setupScene() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x020d1a);
-    scene.fog = new THREE.FogExp2(0x020d1a, 0.001);
+    // Linear fog: (color, near distance, far distance)
+    scene.fog = new THREE.Fog(0x020d1a, 40, 500);
 
     const aspect = window.innerWidth / window.innerHeight;
     const frustumSize = 80;

@@ -10,13 +10,11 @@ export class CloudSystem {
         this.seed = 123456; // Default deterministic seed
         
         this.params = {
-            maxCount: 150,        // Maximum pool size for worst-case weather
-            baseCount: 100,       // Normal clear weather count
+            maxCount: 250,        // Maximum total pool size allocated in memory
             altitudeLow: 14,
             altitudeHigh: 45,
-            size: 35.0,
-            opacity: 0.65,
-            speed: 5.0
+            size: 38.0,
+            opacity: 0.65
         };
 
         this.currentTint = 1.0;
@@ -24,8 +22,8 @@ export class CloudSystem {
         this.currentOpacity = this.params.opacity;
         this.targetOpacity = this.params.opacity;
         
-        this.targetActiveCount = this.params.baseCount;
-        this.currentActiveCount = this.params.baseCount;
+        this.targetActiveCount = 70; // Default starting count
+        this.currentActiveCount = 70;
 
         this.buildCloudPool();
     }
@@ -74,7 +72,7 @@ export class CloudSystem {
 
         for (let i = 0; i < this.params.maxCount; i++) {
             const cluster = new THREE.Group();
-            const puffCount = 4 + Math.floor(this.nextRandom() * 3);
+            const puffCount = 5 + Math.floor(this.nextRandom() * 4);
 
             for (let p = 0; p < puffCount; p++) {
                 const mesh = new THREE.Mesh(puffGeo, this.material);
@@ -95,9 +93,9 @@ export class CloudSystem {
             const posY = isLower ? (this.params.altitudeLow + this.nextRandom() * 8) : (this.params.altitudeHigh + this.nextRandom() * 15);
 
             cluster.position.set(
-                (this.nextRandom() - 0.5) * 1800,
+                (this.nextRandom() - 0.5) * 2000,
                 posY,
-                (this.nextRandom() - 0.5) * 1800
+                (this.nextRandom() - 0.5) * 2000
             );
 
             cluster.scale.set(1.0, 1.0, 1.0);
@@ -105,7 +103,9 @@ export class CloudSystem {
             this.cloudsGroup.add(cluster);
             this.clouds.push({ 
                 mesh: cluster, 
-                speedX: this.params.speed + this.nextRandom() * 3,
+                baseSpeedX: 1.0 + this.nextRandom() * 0.5,
+                baseSpeedZ: (this.nextRandom() - 0.5) * 0.3,
+                pulseSpeed: 0.5 + this.nextRandom() * 1.5,
                 pulseOffset: this.nextRandom() * Math.PI * 2,
                 isActive: false
             });
@@ -113,71 +113,81 @@ export class CloudSystem {
     }
 
     update(delta, nightFactor, cameraQuaternion, windForce, weatherType = 'CLEAR') {
+        const targetSeed = Math.floor(Date.now() / 300000);
+        if (this.currentCloudSeed !== targetSeed) {
+            this.currentCloudSeed = targetSeed;
+            this.setSeed(targetSeed);
+        }
+
         if (!this.cloudsGroup.parent) {
             this.scene.add(this.cloudsGroup);
         }
 
+        let targetDriftSpeed = 2.0;
+
         if (this.currentWeatherState !== weatherType) {
             this.currentWeatherState = weatherType;
-
-            // Dynamic cloud behavior mapped to all 7 weather types
-            switch (weatherType) {
-                case 'STORM':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.8);
-                    this.targetTint = 0.35; // Dark, ominous storm clouds
-                    this.targetOpacity = 0.95;
-                    break;
-                case 'RAIN':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.4);
-                    this.targetTint = 0.65;
-                    this.targetOpacity = 0.85;
-                    break;
-                case 'FOG':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.6);
-                    this.targetTint = 0.9;
-                    this.targetOpacity = 0.92; // Thick low hanging fog clouds
-                    break;
-                case 'RAIN_FOG':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.7);
-                    this.targetTint = 0.75;
-                    this.targetOpacity = 0.90;
-                    break;
-                case 'SNOW':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.3);
-                    this.targetTint = 0.95; // Bright snowy winter clouds
-                    this.targetOpacity = 0.85;
-                    break;
-                case 'SNOW_FOG':
-                    this.targetActiveCount = Math.round(this.params.baseCount * 1.5);
-                    this.targetTint = 0.90;
-                    this.targetOpacity = 0.90;
-                    break;
-                case 'CLEAR':
-                default:
-                    this.targetActiveCount = this.params.baseCount;
-                    this.targetTint = 1.0;
-                    this.targetOpacity = this.params.opacity;
-                    break;
-            }
         }
 
-        // Smoothly transition active cloud counts
+        // =========================================================================
+        // FIXED CLOUD COUNTS AND EXACT DRIFT SPEEDS PER WEATHER TYPE:
+        // =========================================================================
+        switch (weatherType) {
+            case 'STORM':
+                this.targetActiveCount = 250;     // <--- Set exact cloud count for Storms
+                targetDriftSpeed = 5.0;          // <--- Set exact drift speed for Storms
+                this.targetTint = 0.25; 
+                this.targetOpacity = 0.95;
+                break;
+            case 'RAIN':
+                this.targetActiveCount = 200;     // <--- Set exact cloud count for Rain
+                targetDriftSpeed = 3.0;          // <--- Set exact drift speed for Rain
+                this.targetTint = 0.55; 
+                this.targetOpacity = 0.85;
+                break;
+            case 'FOG':
+                this.targetActiveCount = 150;     // <--- Set exact cloud count for Fog
+                targetDriftSpeed = 1.0;           // <--- Set exact drift speed for Fog
+                this.targetTint = 0.80; 
+                this.targetOpacity = 0.92;
+                break;
+            case 'RAIN_FOG':
+                this.targetActiveCount = 175;     // <--- Set exact cloud count for Rain + Fog
+                targetDriftSpeed = 2.0;          // <--- Set exact drift speed for Rain + Fog
+                this.targetTint = 0.60;
+                this.targetOpacity = 0.90;
+                break;
+            case 'SNOW':
+                this.targetActiveCount = 150;     // <--- Set exact cloud count for Snow
+                targetDriftSpeed = 1.0;           // <--- Set exact drift speed for Snow
+                this.targetTint = 0.85; 
+                this.targetOpacity = 0.88;
+                break;
+            case 'SNOW_FOG':
+                this.targetActiveCount = 175;     // <--- Set exact cloud count for Snow + Fog
+                targetDriftSpeed = 1.0;           // <--- Set exact drift speed for Snow + Fog
+                this.targetTint = 0.80;
+                this.targetOpacity = 0.90;
+                break;
+            case 'CLEAR':
+            default:
+                this.targetActiveCount = 100;      // <--- Set exact cloud count for Clear weather
+                targetDriftSpeed = 1.0;           // <--- Set exact drift speed for Clear weather
+                this.targetTint = 1.0; 
+                this.targetOpacity = this.params.opacity;
+                break;
+        }
+        // =========================================================================
+
         this.currentActiveCount = THREE.MathUtils.lerp(this.currentActiveCount, this.targetActiveCount, delta * 2.0);
 
-        // Smooth opacity and tint transitions
         if (this.material && this.material.opacity !== undefined) {
             this.currentOpacity = THREE.MathUtils.lerp(this.currentOpacity, this.targetOpacity, delta * 2.0);
             this.material.opacity = this.currentOpacity;
         }
 
-        let speedMultiplier = 1.0;
-        if (weatherType === 'STORM') speedMultiplier = 2.8;
-        else if (weatherType === 'RAIN' || weatherType === 'RAIN_FOG') speedMultiplier = 1.7;
-        else if (weatherType === 'FOG' || weatherType === 'SNOW_FOG') speedMultiplier = 0.4;
-
         const elapsedTime = Date.now() * 0.001;
 
-        // Update each cloud in the pool smoothly
         for (let i = 0; i < this.clouds.length; i++) {
             const cloud = this.clouds[i];
             const shouldBeActive = i < Math.round(this.currentActiveCount);
@@ -188,11 +198,22 @@ export class CloudSystem {
             cloud.mesh.scale.z = THREE.MathUtils.lerp(cloud.mesh.scale.z, targetClusterScale, delta * 3.0);
 
             if (cloud.mesh.scale.x > 0.05) {
-                const wx = windForce ? windForce.x * 0.5 : 0;
-                cloud.mesh.position.x += (cloud.speedX * speedMultiplier + wx) * delta;
+                cloud.mesh.position.x += cloud.baseSpeedX * targetDriftSpeed * delta;
+                cloud.mesh.position.z += cloud.baseSpeedZ * targetDriftSpeed * delta;
 
-                if (cloud.mesh.position.x > 900) {
-                    cloud.mesh.position.x = -900;
+                const pulse = 1.0 + Math.sin(elapsedTime * cloud.pulseSpeed + cloud.pulseOffset) * 0.06;
+                cloud.mesh.scale.set(targetClusterScale * pulse, targetClusterScale * pulse, targetClusterScale);
+
+                if (cloud.mesh.position.x > 1000) {
+                    cloud.mesh.position.x = -1000;
+                } else if (cloud.mesh.position.x < -1000) {
+                    cloud.mesh.position.x = 1000;
+                }
+
+                if (cloud.mesh.position.z > 1000) {
+                    cloud.mesh.position.z = -1000;
+                } else if (cloud.mesh.position.z < -1000) {
+                    cloud.mesh.position.z = 1000;
                 }
 
                 if (cameraQuaternion) {
@@ -201,7 +222,7 @@ export class CloudSystem {
             }
         }
 
-        const baseTint = 1.0 - (nightFactor * 0.5);
+        const baseTint = 1.0 - (nightFactor * 0.6);
         this.currentTint = THREE.MathUtils.lerp(this.currentTint, baseTint * this.targetTint, delta * 2.0);
         
         if (this.material) {

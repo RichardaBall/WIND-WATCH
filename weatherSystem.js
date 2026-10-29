@@ -10,6 +10,10 @@ export class WeatherSystem {
         this.currentWeather = 'CLEAR';
         this.targetWeather = 'CLEAR';
 
+        // Testing override properties
+        this.useWeatherOverride = false;
+        this.overrideWeatherType = 'CLEAR';
+
         this.windForce = new THREE.Vector3(1.0, 0, 0.5);
 
         // --- Particle Systems for Rain / Snow ---
@@ -58,6 +62,16 @@ export class WeatherSystem {
         this.nextLightningTime = 5.0;
     }
 
+    setWeatherOverride(weatherType) {
+        this.overrideWeatherType = weatherType;
+        this.useWeatherOverride = true;
+        this.setWeather(weatherType);
+    }
+
+    clearWeatherOverride() {
+        this.useWeatherOverride = false;
+    }
+
     setWeather(weatherType) {
         if (this.targetWeather === weatherType) return;
         this.targetWeather = weatherType;
@@ -84,44 +98,45 @@ export class WeatherSystem {
             }
         }
 
+        // Adjust linear fog `far` distance depending on weather severity (smaller `far` = closer/thicker fog)
         if (this.targetWeather === 'CLEAR') {
             this.material.opacity = 0.0;
             this.windForce.set(1.0, 0, 0.5);
-            if (fog) fog.density = 0.001;
+            if (fog) fog.far = 700;
         } else if (this.targetWeather === 'RAIN') {
             this.material.opacity = 0.85;
             this.material.color.setHex(0xa0c0e0);
             this.material.size = 2.5;
             this.windForce.set(3.0, 0, 2.0);
-            if (fog) fog.density = 0.004;
+            if (fog) fog.far = 400;
         } else if (this.targetWeather === 'FOG') {
             this.material.opacity = 0.0;
             this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.density = 0.022;
+            if (fog) fog.far = 150; // Dense fog in the distance, but clear right around the player due to `near = 40`
         } else if (this.targetWeather === 'RAIN_FOG') {
             this.material.opacity = 0.8;
             this.material.color.setHex(0xa0c0e0);
             this.material.size = 2.5;
             this.windForce.set(3.0, 0, 2.0);
-            if (fog) fog.density = 0.016;
+            if (fog) fog.far = 180;
         } else if (this.targetWeather === 'SNOW') {
             this.material.opacity = 0.9;
             this.material.color.setHex(0xffffff);
             this.material.size = 3.5;
             this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.density = 0.004;
+            if (fog) fog.far = 400;
         } else if (this.targetWeather === 'SNOW_FOG') {
             this.material.opacity = 0.85;
             this.material.color.setHex(0xffffff);
             this.material.size = 3.5;
             this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.density = 0.016;
+            if (fog) fog.far = 180;
         } else if (this.targetWeather === 'STORM') {
             this.material.opacity = 0.95;
             this.material.color.setHex(0x80a0c0);
             this.material.size = 3.0;
             this.windForce.set(9.0, 0, 7.0);
-            if (fog) fog.density = 0.010;
+            if (fog) fog.far = 250;
             this.lightningTimer = 0;
             this.nextLightningTime = 3.0 + Math.random() * 4.0;
         }
@@ -164,6 +179,15 @@ export class WeatherSystem {
     }
 
     update(delta) {
+        if (!this.useWeatherOverride) {
+            const weatherTypes = ['CLEAR', 'RAIN', 'FOG', 'STORM', 'SNOW'];
+            const weatherIndex = Math.floor(Date.now() / 120000);
+            const targetWeather = weatherTypes[weatherIndex % weatherTypes.length];
+            if (this.targetWeather !== targetWeather) {
+                this.setWeather(targetWeather);
+            }
+        }
+
         if (this.targetWeather === 'STORM') {
             this.lightningTimer += delta;
             if (this.lightningTimer >= this.nextLightningTime) {
