@@ -207,13 +207,17 @@ export class MissionManager {
     update(delta, playerPosition, nightFactor) {
         if (!this.windFarm || !this.helicopterSystems) return;
 
-        const distToBase = playerPosition.distanceTo(new THREE.Vector3(0, 0, 0));
+        const pad1 = new THREE.Vector3(8.41, 19.81, -6.54);
+        const pad2 = new THREE.Vector3(-10.28, 27.29, 3.74);
+        const distToPad1 = new THREE.Vector2(playerPosition.x, playerPosition.z).distanceTo(new THREE.Vector2(pad1.x, pad1.z));
+        const distToPad2 = new THREE.Vector2(playerPosition.x, playerPosition.z).distanceTo(new THREE.Vector2(pad2.x, pad2.z));
+        const isNearPad = (distToPad1 < 6.0 && Math.abs(playerPosition.y - pad1.y) < 4.0) || (distToPad2 < 6.0 && Math.abs(playerPosition.y - pad2.y) < 4.0);
+
         const player = this.helicopterSystems.playerRef;
-        const isNearBase = distToBase < 25.0;
         const isLanded = player && player.gearDown === true;
         const engineOff = player && (player.engineState === 'OFF' || player.engineState === 'SHUTTING_DOWN');
 
-        if (isNearBase && isLanded && engineOff) {
+        if (isNearPad && isLanded && engineOff) {
             let duration = 3.0;
             let currentTime = 0.0;
 
