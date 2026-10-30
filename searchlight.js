@@ -5,7 +5,7 @@ export class SearchLightSystem {
     constructor(scene, playerGroup) {
         this.scene = scene;
         this.playerGroup = playerGroup;
-        this.state = 'TRACKING'; // Active by default
+        this.state = 'OFF'; // Turned off by default
         this.lockedPosition = new THREE.Vector3();
 
         // Focused downwards spotlight with reduced range so it doesn't spill over to the water

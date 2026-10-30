@@ -369,7 +369,14 @@ export class HelicopterPlayer {
     toggleGear() {
         if (this.hasCrashed) return;
 
-        if (this.gearDown && this.group.position.y < 15.0) {
+        // Prevent operating landing gear while in winch mode (winch deployed, lowering, raising, or climbing back)
+        if (this.winchState !== 'STOWED') {
+            return;
+        }
+
+        // Prevent retracting landing gear unless above cruise/island height threshold (35.0) and not on a landing pad
+        const { isInside } = this.isInside3DBox(this.group.position);
+        if (this.gearDown && (isInside || this.group.position.y < 35.0)) {
             return;
         }
 
