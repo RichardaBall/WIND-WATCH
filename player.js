@@ -253,7 +253,7 @@ export class HelicopterPlayer {
             if (this.winchState === 'STOWED') {
                 this.isWinchActive = true;
                 this.winchState = 'DESCENDING';
-                this.targetAltitude = 22.0;
+                this.targetAltitude = 12.0;
             }
         }
     }
@@ -262,7 +262,7 @@ export class HelicopterPlayer {
         if (this.hasCrashed || this.engineState !== 'RUNNING') return;
         if (this.winchState === 'DEPLOYED') {
             this.winchState = 'RAISING';
-            this.targetAltitude = 22.0;
+            this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
@@ -304,11 +304,9 @@ export class HelicopterPlayer {
         this.currentSpeed = 0;
 
         if ((inPad1 || inPad2) && this.gearDown) {
-            // Valid landing on pad with gear down
             this.landingPadTarget = inPad1 ? new THREE.Vector3(pad1X, 19.81, pad1Z) : new THREE.Vector3(pad2X, 27.29, pad2Z);
             this.targetAltitude = 45.0; 
         } else {
-            // Shutting off in flight or with gear up: descend to sea/ground level and crash
             this.landingPadTarget = null;
             this.targetAltitude = 0.0;
         }
@@ -363,7 +361,7 @@ export class HelicopterPlayer {
         this.targetPosition.copy(newPos);
         const clickPos2D = new THREE.Vector2(newPos.x, newPos.z);
         const isDestOverIsland = clickPos2D.length() < 50.0;
-        const flightAlt = (this.winchState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 22.0;
+        const flightAlt = (this.winchState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 12.0;
         this.targetPosition.y = flightAlt;
         this.targetAltitude = flightAlt;
         this.isMoving = true;
@@ -417,7 +415,6 @@ export class HelicopterPlayer {
         }
 
         if (this.flightStarted) {
-            // Check sea level impact during mid-air shutdown descent
             if (this.engineState === 'SHUTTING_DOWN' && !this.landingPadTarget) {
                 if (pos.y <= 2.0) {
                     this.triggerCrash(isOverOcean);
@@ -430,7 +427,9 @@ export class HelicopterPlayer {
                 return;
             }
 
-            if (!isInside && pos.y <= 25.0 && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
+            // Adjusted low-altitude crash threshold to allow safe descent to winch height (12m)
+            const minSafeAlt = (this.winchState !== 'STOWED') ? 8.0 : 15.0;
+            if (!isInside && pos.y <= minSafeAlt && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
                 this.triggerCrash(false);
                 return;
             }
@@ -447,8 +446,8 @@ export class HelicopterPlayer {
         }
 
         if (this.winchState === 'DESCENDING') {
-            this.targetAltitude = 22.0;
-            if (Math.abs(this.group.position.y - 22.0) < 1.0) {
+            this.targetAltitude = 12.0;
+            if (Math.abs(this.group.position.y - 12.0) < 1.0) {
                 this.winchState = 'LOWERING';
                 this.winchTimer = 1.5; 
                 this.isMoving = false;
@@ -456,7 +455,7 @@ export class HelicopterPlayer {
                 this.targetPosition.copy(this.group.position);
             }
         } else if (this.winchState === 'LOWERING') {
-            this.targetAltitude = 22.0;
+            this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
@@ -465,7 +464,7 @@ export class HelicopterPlayer {
                 this.winchState = 'DEPLOYED'; 
             }
         } else if (this.winchState === 'RAISING') {
-            this.targetAltitude = 22.0;
+            this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
