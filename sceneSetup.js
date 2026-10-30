@@ -23,11 +23,14 @@ export function setupScene() {
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    // Capped pixel ratio to 1.5 max to drastically reduce fragment shading cost on high-DPI screens
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
+
+    // Ensure canvas stretches to cover 100% width and height without layout gaps
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
     document.body.appendChild(renderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0x88aacc, 1.2);

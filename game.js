@@ -301,44 +301,6 @@ export class Game {
                 this.settings.setVisible(isOpen);
             }
         });
-
-        window.addEventListener('start-loading-game', () => {
-            if (this.player && this.player.audioManager) {
-                this.player.audioManager.playLoadingMusic();
-            }
-
-            const progressBar = document.getElementById('loading-progress');
-            const loadingStatus = document.getElementById('loading-status');
-            const loadingScreen = document.getElementById('loading-screen');
-            const copyrightNotice = document.getElementById('copyright-notice');
-
-            if (loadingStatus) loadingStatus.innerText = 'Warming assets & compiling shaders...';
-            if (progressBar) progressBar.style.width = '50%';
-
-            if (this.renderer && this.scene && this.camera) {
-                this.renderer.compile(this.scene, this.camera);
-            }
-
-            setTimeout(() => {
-                if (progressBar) progressBar.style.width = '100%';
-                if (loadingStatus) loadingStatus.innerText = 'Ready! Launching flight...';
-                
-                if (this.player && this.player.audioManager) {
-                    this.player.audioManager.fadeOutLoadingMusic(1.0);
-                }
-
-                setTimeout(() => {
-                    if (loadingScreen) {
-                        loadingScreen.style.opacity = '0';
-                        if (copyrightNotice) copyrightNotice.style.opacity = '0';
-                        setTimeout(() => {
-                            loadingScreen.style.display = 'none';
-                            if (copyrightNotice) copyrightNotice.style.display = 'none';
-                        }, 600);
-                    }
-                }, 300);
-            }, 400);
-        });
     }
 
     animate() {
