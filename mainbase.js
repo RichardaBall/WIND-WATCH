@@ -49,21 +49,26 @@ export class MainBase {
         this.group.add(pad2Mesh);
 
         this.foamParams = {
-            width: 39.0,
-            height: 39.0,
-            cornerRadius: 6.0,
-            particlesCount: 300,
+            particlesCount: 1200,
             offsetX: -1.5,
             offsetZ: -1.5,
             posY: -8.7,
-            rotX: -37.0,
-            rotY: -3.0,
-            rotZ: 50.0,
+            rotX: -37,
+            rotY: -3,
+            rotZ: 50,
             waveSpeed: 0.2,
             waveAmplitude: 1.8,
-            particleSize: 27.0,
+            particleSize: 27,
             opacity: 0.5
         };
+
+        this.lineSegments = [
+            { x: 29, y: -14, rotation: 54, length: 16, count: 70 },
+            { x: 5, y: -25, rotation: 158, length: 14, count: 70 },
+            { x: -10, y: 31.5, rotation: 2, length: 13, count: 50 },
+            { x: -19.5, y: 10.5, rotation: 85, length: 38, count: 180 },
+            { x: -17, y: -11.5, rotation: 144, length: 11.5, count: 40 }
+        ];
 
         this.maxParticles = 8000;
         this.foamGeometry = new THREE.BufferGeometry();
@@ -185,74 +190,55 @@ export class MainBase {
         }
 
         const elapsedTime = Date.now() * 0.001;
-        const count = this.foamParams.particlesCount;
-        const w = Math.max(0.1, this.foamParams.width);
-        const h = Math.max(0.1, this.foamParams.height);
-        const r = Math.min(this.foamParams.cornerRadius, w / 2, h / 2);
 
-        const getRoundedRectPoint = (t, out = new THREE.Vector2()) => {
-            const hw = w / 2;
-            const hh = h / 2;
-            const sw = w - 2 * r;
-            const sh = h - 2 * r;
-            const cLen = (Math.PI * r) / 2;
-            const totalLen = 2 * sw + 2 * sh + 4 * cLen;
+        // Calculate particles across the 5 line segments using Center, Rotation, and Length
+        let particleIdx = 0;
 
-            let d = (t % 1.0) * totalLen;
-            if (d < 0) d += totalLen;
+        for (let l = 0; l < this.lineSegments.length; l++) {
+            const seg = this.lineSegments[l];
+            const count = seg.count;
+            const rad = THREE.MathUtils.degToRad(seg.rotation);
+            const halfLen = seg.length / 2;
 
-            if (d <= sw) return out.set(-hw + r + d, -hh);
-            d -= sw;
-            if (d <= cLen) {
-                const ang = -Math.PI / 2 + (d / cLen) * (Math.PI / 2);
-                return out.set(hw - r + r * Math.cos(ang), -hh + r + r * Math.sin(ang));
+            const startX = seg.x - Math.cos(rad) * halfLen;
+            const startY = seg.y - Math.sin(rad) * halfLen;
+            const endX = seg.x + Math.cos(rad) * halfLen;
+            const endY = seg.y + Math.sin(rad) * halfLen;
+
+            for (let i = 0; i < count; i++) {
+                if (particleIdx >= this.maxParticles) break;
+
+                const idx = particleIdx * 3;
+                const phase = this.foamOffsets[particleIdx];
+
+                const t = count > 1 ? i / (count - 1) : 0.5;
+                let x = startX + t * (endX - startX);
+                let y = startY + t * (endY - startY);
+
+                const wave = Math.sin(elapsedTime * this.foamParams.waveSpeed * 3.0 + phase) * this.foamParams.waveAmplitude;
+                
+                const dx = endX - startX;
+                const dy = endY - startY;
+                const len = Math.sqrt(dx * dx + dy * dy);
+
+                if (len > 0.001) {
+                    const nx = -dy / len;
+                    const ny = dx / len;
+                    x += nx * wave;
+                    y += ny * wave;
+                }
+
+                const z = Math.sin(elapsedTime * 3.0 + particleIdx) * 0.08;
+
+                this.foamPositions[idx] = x;
+                this.foamPositions[idx + 1] = y;
+                this.foamPositions[idx + 2] = z;
+
+                particleIdx++;
             }
-            d -= cLen;
-            if (d <= sh) return out.set(hw, -hh + r + d);
-            d -= sh;
-            if (d <= cLen) {
-                const ang = 0 + (d / cLen) * (Math.PI / 2);
-                return out.set(hw - r + r * Math.cos(ang), hh - r + r * Math.sin(ang));
-            }
-            d -= cLen;
-            if (d <= sw) return out.set(hw - r - d, hh);
-            d -= sw;
-            if (d <= cLen) {
-                const ang = Math.PI / 2 + (d / cLen) * (Math.PI / 2);
-                return out.set(-hw + r + r * Math.cos(ang), hh - r + r * Math.sin(ang));
-            }
-            d -= cLen;
-            if (d <= sh) return out.set(-hw, hh - r - d);
-            d -= sh;
-            const ang = Math.PI + (d / cLen) * (Math.PI / 2);
-            return out.set(-hw + r + r * Math.cos(ang), -hh + r + r * Math.sin(ang));
-        };
-
-        const tempVec = new THREE.Vector2();
-
-        for (let i = 0; i < count; i++) {
-            const idx = i * 3;
-            const phase = this.foamOffsets[i];
-
-            const baseT = i / count;
-            getRoundedRectPoint(baseT, tempVec);
-            let x = tempVec.x;
-            let y = tempVec.y;
-
-            const wave = Math.sin(elapsedTime * this.foamParams.waveSpeed * 3.0 + phase) * this.foamParams.waveAmplitude;
-            const netLen = Math.sqrt(x * x + y * y);
-            if (netLen > 0.001) {
-                x += (x / netLen) * wave;
-                y += (y / netLen) * wave;
-            }
-
-            const z = Math.sin(elapsedTime * 3.0 + i) * 0.08;
-
-            this.foamPositions[idx] = x;
-            this.foamPositions[idx + 1] = y;
-            this.foamPositions[idx + 2] = z;
         }
 
+        this.foamGeometry.setDrawRange(0, particleIdx);
         this.foamGeometry.attributes.position.needsUpdate = true;
 
         const intensityMultiplier = nightFactor * 3.0;
