@@ -1,24 +1,27 @@
+// searchlight.js
 import * as THREE from 'three';
 
 export class SearchLightSystem {
     constructor(scene, playerGroup) {
         this.scene = scene;
         this.playerGroup = playerGroup;
-        this.state = 'OFF';
+        this.state = 'TRACKING'; // Active by default
         this.lockedPosition = new THREE.Vector3();
 
-        // High-intensity daylight searchlight with pure white color and balanced attenuation for vibrant daytime illumination
-        this.spotLight = new THREE.SpotLight(0xffffff, 0.0, 250, Math.PI / 6, 0.3, 1.0);
+        // Focused downwards spotlight with reduced range so it doesn't spill over to the water
+        this.spotLight = new THREE.SpotLight(0xffffee, 40.0, 50.0, Math.PI / 6, 0.5, 1.0);
+        
+        // Position directly under the helicopter pointing straight down
         this.spotLight.position.set(0, -0.5, 0);
         this.playerGroup.add(this.spotLight);
 
-        // Target object placed in the scene
+        // Target object placed right below the helicopter
         this.lightTarget = new THREE.Object3D();
         this.scene.add(this.lightTarget);
         this.spotLight.target = this.lightTarget;
 
-        // Clean daylight-lit circle disc on the water surface using NormalBlending to avoid washing out
-        const discGeo = new THREE.CircleGeometry(6.0, 32);
+        // Clean light circle disc directly beneath
+        const discGeo = new THREE.CircleGeometry(4.0, 32);
         discGeo.rotateX(-Math.PI / 2);
         
         const canvas = document.createElement('canvas');
@@ -49,41 +52,29 @@ export class SearchLightSystem {
     cycleState(worldPos) {
         if (this.state === 'OFF') {
             this.state = 'TRACKING';
-            console.log("Searchlight: ON (Tracking Mouse) 🔦");
-        } else if (this.state === 'TRACKING') {
-            this.state = 'LOCKED';
-            if (worldPos) {
-                this.lockedPosition.copy(worldPos);
-            }
-            console.log("Searchlight: LOCKED to point 🎯");
         } else {
             this.state = 'OFF';
-            console.log("Searchlight: OFF");
         }
     }
 
-    update(delta, nightFactor, mouseWorldPos) {
+    update(delta, nightFactor, mouseWorldPos, currentFrame = 5, totalFrames = 8) {
         if (this.state === 'OFF') {
             this.spotLight.intensity = 0.0;
             this.lightPoolMesh.material.opacity = 0.0;
             return;
         }
 
-        // Full daytime illumination intensity inside the light cone at night
-        this.spotLight.intensity = nightFactor * 90.0;
-        this.lightPoolMesh.material.opacity = nightFactor * 0.9;
+        this.spotLight.intensity = nightFactor * 45.0;
+        
+        // Only show the ground light pool if the helicopter is over the main base area (near the center island)
+        const heliPos = this.playerGroup.position;
+        const distFromCenter = Math.sqrt(heliPos.x * heliPos.x + heliPos.z * heliPos.z);
+        const isOverMainBase = distFromCenter < 45.0;
 
-        // Determine target based on current state
-        let targetPos = (this.state === 'LOCKED') ? this.lockedPosition : mouseWorldPos;
+        this.lightPoolMesh.material.opacity = isOverMainBase ? nightFactor * 0.8 : 0.0;
 
-        if (targetPos) {
-            this.lightTarget.position.copy(targetPos);
-            this.lightTarget.y = 0.0;
-            this.lightPoolMesh.position.set(targetPos.x, 0.05, targetPos.z);
-        } else {
-            const heliPos = this.playerGroup.position;
-            this.lightTarget.position.set(heliPos.x, 0.0, heliPos.z + 15.0);
-            this.lightPoolMesh.position.set(heliPos.x, 0.05, heliPos.z + 15.0);
-        }
+        // Point straight down below the helicopter
+        this.lightTarget.position.set(heliPos.x, heliPos.y - 20.0, heliPos.z);
+        this.lightPoolMesh.position.set(heliPos.x, 0.05, heliPos.z);
     }
 }

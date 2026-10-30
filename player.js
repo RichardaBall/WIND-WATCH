@@ -63,12 +63,11 @@ export class HelicopterPlayer {
         this.landingPadTarget = null;
         this.isTakingOff = false;
 
-        this.searchLight = new THREE.SpotLight(0xffffee, 0.0, 120.0, Math.PI / 5, 0.4, 1.5);
+        this.searchLight = new THREE.SpotLight(0xffffee, 150.0, 300.0, Math.PI / 4, 0.5, 1.0);
         this.searchLight.position.set(0, -0.5, 0);
+        
         this.searchLightTarget = new THREE.Object3D();
-        this.searchLightTarget.position.set(0, -15, 10);
-        this.group.add(this.searchLight);
-        this.group.add(this.searchLightTarget);
+        this.scene.add(this.searchLightTarget);
         this.searchLight.target = this.searchLightTarget;
 
         const shadowCanvas = document.createElement('canvas');
@@ -393,7 +392,8 @@ export class HelicopterPlayer {
     update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
 
-        this.searchLight.intensity = (this.engineState === 'RUNNING') ? (nightFactor * 65.0) : 0.0;
+        // Ensure light is enabled when engine is running regardless of night factor, with boosted brightness at night
+        this.searchLight.intensity = (this.engineState === 'RUNNING') ? Math.max(40.0, nightFactor * 150.0) : 0.0;
 
         const pos = this.group.position;
         const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
@@ -427,7 +427,6 @@ export class HelicopterPlayer {
                 return;
             }
 
-            // Adjusted low-altitude crash threshold to allow safe descent to winch height (12m)
             const minSafeAlt = (this.winchState !== 'STOWED') ? 8.0 : 15.0;
             if (!isInside && pos.y <= minSafeAlt && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
                 this.triggerCrash(false);
@@ -606,6 +605,15 @@ export class HelicopterPlayer {
         } else {
             this.currentSpeed = 0;
         }
+
+        // --- Calculate light target direction based on current frame / heading angle ---
+        const headingAngle = (this.currentFrame / this.totalFrames) * (Math.PI * 2) + Math.PI;
+        const forwardDist = 5.0;
+        const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
+        const targetZ = currentPos.z + Math.cos(headingAngle) * forwardDist;
+        const targetY = currentPos.y - 5.5; // 45-degree angle down towards the ground/water
+        
+        this.searchLightTarget.position.set(targetX, targetY, targetZ);
     }
 
     getPosition() {
