@@ -14,7 +14,6 @@ export class HelicopterPlayer {
 
         const geometry = new THREE.PlaneGeometry(24, 24);
         
-        // Single material handling base shading and emissive map for both nav lights and cockpit glow
         this.material = new THREE.MeshStandardMaterial({
             color: 0xffffff,
             roughness: 0.4,
@@ -29,7 +28,6 @@ export class HelicopterPlayer {
         this.mesh = new THREE.Mesh(geometry, this.material);
         this.group.add(this.mesh);
 
-        // --- Rotor Group Permanent Settings ---
         this.rotorGroup = new THREE.Group();
         this.rotorGroup.position.set(0, 2.0, 0); 
         this.group.add(this.rotorGroup);
@@ -60,10 +58,11 @@ export class HelicopterPlayer {
 
         this.gearDown = true;
         this.isWinchActive = false;
-        this.winchState = 'STOWED'; // 'STOWED', 'DESCENDING', 'LOWERING', 'DEPLOYED', 'RAISING', 'CLIMBING'
+        this.winchState = 'STOWED'; 
         this.winchTimer = 0;
+        this.landingPadTarget = null;
+        this.isTakingOff = false;
 
-        // --- Belly Night Searchlight Setup ---
         this.searchLight = new THREE.SpotLight(0xffffee, 0.0, 120.0, Math.PI / 5, 0.4, 1.5);
         this.searchLight.position.set(0, -0.5, 0);
         this.searchLightTarget = new THREE.Object3D();
@@ -72,7 +71,6 @@ export class HelicopterPlayer {
         this.group.add(this.searchLightTarget);
         this.searchLight.target = this.searchLightTarget;
 
-        // --- Ground Shadow Setup ---
         const shadowCanvas = document.createElement('canvas');
         shadowCanvas.width = 64;
         shadowCanvas.height = 64;
@@ -97,7 +95,6 @@ export class HelicopterPlayer {
         this.shadowMesh.position.set(0, 0.2, 0);   
         this.scene.add(this.shadowMesh);
 
-        // --- Vertical Tracking Line Setup ---
         const lineGeo = new THREE.BufferGeometry().setFromPoints([
             new THREE.Vector3(0, 0, 0),
             new THREE.Vector3(0, 0, 0)
@@ -113,7 +110,6 @@ export class HelicopterPlayer {
         this.dropLine.frustumCulled = false;
         this.scene.add(this.dropLine);
 
-        // Start facing down using frame index 5
         this.currentFrame = 5;
 
         textureLoader.load('helicopter_gear.png', (tex) => {
@@ -130,8 +126,6 @@ export class HelicopterPlayer {
                 this.material.map = tex;
                 this.material.needsUpdate = true;
             }
-        }, undefined, (err) => {
-            console.error('Error loading helicopter_gear.png:', err);
         });
 
         textureLoader.load('helicopter.png', (tex) => {
@@ -144,8 +138,6 @@ export class HelicopterPlayer {
             tex.offset.x = this.currentFrame * (1 / this.totalFrames);
 
             this.gearUpTex = tex; 
-        }, undefined, (err) => {
-            console.error('Error loading helicopter.png:', err);
         });
 
         textureLoader.load('helicopter_emissive.png', (tex) => {
@@ -160,18 +152,16 @@ export class HelicopterPlayer {
             this.emissiveTex = tex;
             this.material.emissiveMap = tex;
             this.material.needsUpdate = true;
-        }, undefined, (err) => {
-            console.warn('helicopter_emissive.png not found.');
-        });
+        }, undefined, () => {});
 
-        this.group.position.set(0, 6, 0);
-        this.targetPosition = new THREE.Vector3(0, 6, 0);
+        this.group.position.set(8.41, 19.81, -6.54);
+        this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
         this.maxSpeed = 37.5;
-        this.currentSpeed = 0; // Smooth velocity tracking for acceleration/deceleration curves
+        this.currentSpeed = 0; 
         this.isMoving = false;
 
         this.engineState = 'OFF'; 
-        this.targetAltitude = 6;  
+        this.targetAltitude = 19.81;  
         this.verticalVelocity = 0;
 
         this.audioManager = new AudioManager();
@@ -206,6 +196,8 @@ export class HelicopterPlayer {
         this.currentFrame = 5;
         this.verticalVelocity = 0;
         this.currentSpeed = 0;
+        this.landingPadTarget = null;
+        this.isTakingOff = false;
 
         if (this.helicopterSystems) {
             this.helicopterSystems.fuel = this.helicopterSystems.maxFuel;
@@ -222,9 +214,9 @@ export class HelicopterPlayer {
             this.material.emissiveMap.offset.x = 5 * (1 / this.totalFrames);
             this.material.needsUpdate = true;
         }
-        this.group.position.set(0, 6, 0);
-        this.targetPosition.set(0, 6, 0);
-        this.targetAltitude = 6;
+        this.group.position.set(8.41, 19.81, -6.54);
+        this.targetPosition.set(8.41, 19.81, -6.54);
+        this.targetAltitude = 19.81;
         this.isMoving = false;
         this.rotorSpeed = 0;
         this.searchLight.intensity = 0;
@@ -255,13 +247,13 @@ export class HelicopterPlayer {
     }
 
     setWinchMode(isWinchActive) {
-        if (this.hasCrashed || this.engineState !== 'RUNNING') return;
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
 
         if (isWinchActive) {
             if (this.winchState === 'STOWED') {
                 this.isWinchActive = true;
                 this.winchState = 'DESCENDING';
-                this.targetAltitude = 12.0;
+                this.targetAltitude = 22.0;
             }
         }
     }
@@ -270,7 +262,7 @@ export class HelicopterPlayer {
         if (this.hasCrashed || this.engineState !== 'RUNNING') return;
         if (this.winchState === 'DEPLOYED') {
             this.winchState = 'RAISING';
-            this.targetAltitude = 12.0;
+            this.targetAltitude = 22.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
@@ -280,38 +272,56 @@ export class HelicopterPlayer {
     finishRetraction() {
         if (this.winchState === 'RAISING') {
             this.winchState = 'CLIMBING';
-            this.targetAltitude = 32.0;
+            this.targetAltitude = 45.0;
         }
     }
 
-    shutdownEngine() {
-        if (this.hasCrashed || this.engineState !== 'RUNNING') return;
+    isInside3DBox(pos) {
+        const pad1X = 8.41, pad1Z = -6.54, pad1Y = 19.81;
+        const pad2X = -10.28, pad2Z = 3.74, pad2Y = 27.29;
+        const halfSize = 4.0; 
+        const boxHeight = 6.0;
 
-        const padCenter = new THREE.Vector2(0, 0);
+        const inPad1 = Math.abs(pos.x - pad1X) <= halfSize && Math.abs(pos.z - pad1Z) <= halfSize && pos.y >= pad1Y && pos.y <= pad1Y + boxHeight;
+        const inPad2 = Math.abs(pos.x - pad2X) <= halfSize && Math.abs(pos.z - pad2Z) <= halfSize && pos.y >= pad2Y && pos.y <= pad2Y + boxHeight;
+        
+        return { inPad1, inPad2, isInside: inPad1 || inPad2 };
+    }
+
+    shutdownEngine() {
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
+
+        const pad1X = 8.41, pad1Z = -6.54;
+        const pad2X = -10.28, pad2Z = 3.74;
+        const halfSize = 6.0; 
         const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
-        const distanceFromBase = pos2D.distanceTo(padCenter);
-        const isOverOcean = distanceFromBase > 5.0;
+
+        const inPad1 = Math.abs(pos2D.x - pad1X) <= halfSize && Math.abs(pos2D.y - pad1Z) <= halfSize;
+        const inPad2 = Math.abs(pos2D.x - pad2X) <= halfSize && Math.abs(pos2D.y - pad2Z) <= halfSize;
 
         this.engineState = 'SHUTTING_DOWN';
-        
-        if (!isOverOcean) {
-            this.targetPosition.set(0, 6.0, 0);
-        } else {
-            this.targetPosition.copy(this.group.position);
-        }
-        
         this.isMoving = false;
         this.currentSpeed = 0;
+
+        if ((inPad1 || inPad2) && this.gearDown) {
+            // Valid landing on pad with gear down
+            this.landingPadTarget = inPad1 ? new THREE.Vector3(pad1X, 19.81, pad1Z) : new THREE.Vector3(pad2X, 27.29, pad2Z);
+            this.targetAltitude = 45.0; 
+        } else {
+            // Shutting off in flight or with gear up: descend to sea/ground level and crash
+            this.landingPadTarget = null;
+            this.targetAltitude = 0.0;
+        }
 
         this.audioManager.playShutdown(() => {
             this.audioManager.stopRotor();
         }, () => {
             if (this.engineState === 'SHUTTING_DOWN') {
                 this.engineState = 'OFF';
+                this.landingPadTarget = null;
+                this.isTakingOff = false;
             }
         });
-
-        this.targetAltitude = isOverOcean ? 0.0 : 6.0; 
     }
 
     handleEngineKey() {
@@ -319,10 +329,11 @@ export class HelicopterPlayer {
 
         if (this.engineState === 'OFF') {
             this.engineState = 'STARTING';
-            this.targetPosition.copy(this.group.position);
             this.isMoving = false;
             this.currentSpeed = 0;
             this.flightStarted = true;
+            this.isTakingOff = true;
+            this.landingPadTarget = null;
             
             this.audioManager.playStartup(() => {
                 if (this.engineState === 'STARTING') {
@@ -331,7 +342,9 @@ export class HelicopterPlayer {
             }, () => {
                 if (this.engineState === 'STARTING') {
                     this.engineState = 'RUNNING';
-                    this.targetAltitude = this.isWinchActive ? 12.0 : 32.0; 
+                    this.targetAltitude = 45.0;
+                    this.targetPosition.copy(this.group.position);
+                    this.targetPosition.y = 45.0;
                 }
             });
         } else if (this.engineState === 'RUNNING') {
@@ -340,33 +353,26 @@ export class HelicopterPlayer {
     }
 
     setTarget(newPos) {
+        if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff || this.engineState === 'SHUTTING_DOWN') {
+            return;
+        }
         if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
             return;
         }
 
-        const currentTargetAlt = (this.winchState === 'STOWED') ? 32.0 : 12.0;
-        if (this.hasCrashed || this.engineState !== 'RUNNING' || Math.abs(this.group.position.y - currentTargetAlt) > 20.0) {
-            return;
-        }
-
-        const padCenter = new THREE.Vector2(0, 0);
+        this.targetPosition.copy(newPos);
         const clickPos2D = new THREE.Vector2(newPos.x, newPos.z);
-        
-        const snapThreshold = 5.0;
-        if (clickPos2D.distanceTo(padCenter) < snapThreshold) {
-            this.targetPosition.set(0, currentTargetAlt, 0);
-        } else {
-            this.targetPosition.copy(newPos);
-            this.targetPosition.y = currentTargetAlt; 
-        }
-
+        const isDestOverIsland = clickPos2D.length() < 50.0;
+        const flightAlt = (this.winchState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 22.0;
+        this.targetPosition.y = flightAlt;
+        this.targetAltitude = flightAlt;
         this.isMoving = true;
     }
 
     toggleGear() {
         if (this.hasCrashed) return;
 
-        if (this.gearDown && this.group.position.y < 10.0) {
+        if (this.gearDown && this.group.position.y < 15.0) {
             return;
         }
 
@@ -391,29 +397,58 @@ export class HelicopterPlayer {
 
         this.searchLight.intensity = (this.engineState === 'RUNNING') ? (nightFactor * 65.0) : 0.0;
 
-        const padCenter = new THREE.Vector2(0, 0);
-        const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
-        const distanceFromBase = pos2D.distanceTo(padCenter);
-        const isOverOcean = distanceFromBase > 5.0;
+        const pos = this.group.position;
+        const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
+        const pos2D = new THREE.Vector2(pos.x, pos.z);
+        const isOverOcean = pos2D.length() > 55.0;
+
+        if (this.isTakingOff && this.engineState === 'RUNNING') {
+            this.targetAltitude = 45.0;
+            this.isMoving = false;
+            this.currentSpeed = 0;
+            if (Math.abs(pos.y - 45.0) < 1.0) {
+                this.isTakingOff = false; 
+            }
+        }
+
+        if (this.engineState === 'RUNNING' && this.winchState === 'STOWED' && !this.isMoving && !this.isTakingOff && this.engineState !== 'SHUTTING_DOWN') {
+            const isOverIsland = pos2D.length() < 50.0;
+            this.targetAltitude = isOverIsland ? 45.0 : 38.0;
+        }
 
         if (this.flightStarted) {
-            if (isOverOcean && this.group.position.y <= 1.0) {
+            // Check sea level impact during mid-air shutdown descent
+            if (this.engineState === 'SHUTTING_DOWN' && !this.landingPadTarget) {
+                if (pos.y <= 2.0) {
+                    this.triggerCrash(isOverOcean);
+                    return;
+                }
+            }
+
+            if (isOverOcean && pos.y <= 2.0) {
                 this.triggerCrash(true);
                 return;
             }
 
-            if (this.engineState === 'SHUTTING_DOWN' && Math.abs(this.group.position.y - 6.0) < 0.5) {
-                if (distanceFromBase < 8.0 && !this.gearDown) {
-                    this.triggerCrash(false);
-                    return;
+            if (!isInside && pos.y <= 25.0 && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
+                this.triggerCrash(false);
+                return;
+            }
+
+            if (this.engineState === 'SHUTTING_DOWN' && this.landingPadTarget) {
+                const targetPadY = this.landingPadTarget.y;
+                if (Math.abs(pos.y - targetPadY) < 0.8) {
+                    if (!this.gearDown) {
+                        this.triggerCrash(false);
+                        return;
+                    }
                 }
             }
         }
 
-        // Handle Winch State Machine Transitions & Timers
         if (this.winchState === 'DESCENDING') {
-            this.targetAltitude = 12.0;
-            if (Math.abs(this.group.position.y - 12.0) < 1.0) {
+            this.targetAltitude = 22.0;
+            if (Math.abs(this.group.position.y - 22.0) < 1.0) {
                 this.winchState = 'LOWERING';
                 this.winchTimer = 1.5; 
                 this.isMoving = false;
@@ -421,7 +456,7 @@ export class HelicopterPlayer {
                 this.targetPosition.copy(this.group.position);
             }
         } else if (this.winchState === 'LOWERING') {
-            this.targetAltitude = 12.0;
+            this.targetAltitude = 22.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
@@ -430,13 +465,13 @@ export class HelicopterPlayer {
                 this.winchState = 'DEPLOYED'; 
             }
         } else if (this.winchState === 'RAISING') {
-            this.targetAltitude = 12.0;
+            this.targetAltitude = 22.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
         } else if (this.winchState === 'CLIMBING') {
-            this.targetAltitude = 32.0;
-            if (Math.abs(this.group.position.y - 32.0) < 1.0) {
+            this.targetAltitude = 45.0;
+            if (Math.abs(this.group.position.y - 45.0) < 1.0) {
                 this.isWinchActive = false;
                 this.winchState = 'STOWED';
             }
@@ -479,12 +514,24 @@ export class HelicopterPlayer {
         this.verticalVelocity += (altitudeError * verticalAccel - this.verticalVelocity * verticalDamping) * delta;
         currentPos.y += this.verticalVelocity * delta;
 
-        if (this.engineState === 'SHUTTING_DOWN' && distanceFromBase < 5.0) {
-            currentPos.x = THREE.MathUtils.lerp(currentPos.x, 0.0, delta * 3.0);
-            currentPos.z = THREE.MathUtils.lerp(currentPos.z, 0.0, delta * 3.0);
+        if (this.engineState === 'SHUTTING_DOWN' && this.landingPadTarget) {
+            const padXZ = new THREE.Vector2(this.landingPadTarget.x, this.landingPadTarget.z);
+            const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
+            const dist = currentXZ.distanceTo(padXZ);
+
+            if (dist > 0.4) {
+                this.targetAltitude = 45.0; 
+                currentXZ.lerp(padXZ, delta * 4.0);
+                currentPos.x = currentXZ.x;
+                currentPos.z = currentXZ.y;
+            } else {
+                currentPos.x = this.landingPadTarget.x;
+                currentPos.z = this.landingPadTarget.z;
+                this.targetAltitude = this.landingPadTarget.y;
+            }
         }
 
-        if (this.engineState === 'RUNNING') {
+        if (this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN' && !this.isTakingOff) {
             currentPos.x += windForce.x * delta * 0.15;
             currentPos.z += windForce.z * delta * 0.15;
         }
@@ -508,7 +555,7 @@ export class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        if (this.isMoving && this.engineState === 'RUNNING' && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+        if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = new THREE.Vector2(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
@@ -517,18 +564,14 @@ export class HelicopterPlayer {
                 const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
                 const targetMaxSpeed = isSlow ? this.maxSpeed * 0.5 : this.maxSpeed;
 
-                // --- Smooth Acceleration & Deceleration Curve ---
-                // Decelerate smoothly when within 15 units of the target destination
                 let desiredSpeed = targetMaxSpeed;
                 const slowingRadius = 15.0;
                 if (distance < slowingRadius) {
                     desiredSpeed = targetMaxSpeed * (distance / slowingRadius);
-                    // Ensure a minimum crawling speed so it smoothly touches down on the target
                     desiredSpeed = Math.max(desiredSpeed, 2.0);
                 }
 
-                // Smoothly accelerate/decelerate current speed toward desired speed
-                const accelerationRate = 25.0; // Higher = faster response, Lower = heavier momentum feel
+                const accelerationRate = 25.0; 
                 this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, delta * accelerationRate);
 
                 const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();

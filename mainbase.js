@@ -1,3 +1,4 @@
+// mainbase.js
 import * as THREE from 'three';
 
 export class MainBase {
@@ -7,7 +8,7 @@ export class MainBase {
         this.renderer = renderer;
 
         this.group = new THREE.Group();
-        this.group.position.set(0, 5, 0);
+        this.group.position.set(0, 20, 0); 
         scene.add(this.group);
 
         const textureLoader = new THREE.TextureLoader();
@@ -19,29 +20,48 @@ export class MainBase {
         this.material = new THREE.MeshStandardMaterial({
             map: baseTexture,
             transparent: true,
-            alphaTest: 0.5,
+            depthTest: true, 
+            depthWrite: false,
             roughness: 0.4
         });
 
-        const baseGeometry = new THREE.PlaneGeometry(24, 24);
+        const baseGeometry = new THREE.PlaneGeometry(72, 72);
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
         this.group.add(this.mesh);
 
-        // --- Hardcoded Square Foam Settings ---
+        // --- 3D Landing Area Safe Zone Boxes (Invisible Collision/Landing Volumes) ---
+        const boxHeight = 6.0;
+        const padBoxGeo = new THREE.BoxGeometry(8.0, boxHeight, 8.0);
+        const padBoxMat = new THREE.MeshBasicMaterial({
+            color: 0x00ffcc,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.0, // Fully invisible while maintaining bounds
+            visible: false
+        });
+
+        const pad1Mesh = new THREE.Mesh(padBoxGeo, padBoxMat);
+        pad1Mesh.position.set(8.41, (19.81 - 20) + (boxHeight / 2), -6.54);
+        this.group.add(pad1Mesh);
+
+        const pad2Mesh = new THREE.Mesh(padBoxGeo, padBoxMat);
+        pad2Mesh.position.set(-10.28, (27.29 - 20) + (boxHeight / 2), 3.74);
+        this.group.add(pad2Mesh);
+
         this.foamParams = {
-            width: 13.0,
-            height: 13.0,
-            cornerRadius: 2.0,
+            width: 39.0,
+            height: 39.0,
+            cornerRadius: 6.0,
             particlesCount: 300,
-            offsetX: -0.5,
-            offsetZ: -0.5,
-            posY: -2.9,
+            offsetX: -1.5,
+            offsetZ: -1.5,
+            posY: -8.7,
             rotX: -37.0,
             rotY: -3.0,
             rotZ: 50.0,
             waveSpeed: 0.2,
-            waveAmplitude: 0.6,
-            particleSize: 9.0,
+            waveAmplitude: 1.8,
+            particleSize: 27.0,
             opacity: 0.5
         };
 
@@ -79,6 +99,7 @@ export class MainBase {
             map: foamTexture,
             transparent: true,
             blending: THREE.NormalBlending,
+            depthTest: true,
             depthWrite: false,
             opacity: this.foamParams.opacity
         });
@@ -93,22 +114,22 @@ export class MainBase {
 
         this.lightConfigs = {
             green: [
-                { x: -2.1, y: -1.4, scale: 0.05 },
-                { x: 2, y: -1.5, scale: 0.05 },
-                { x: -1.7, y: 1.2, scale: 0.05 },
-                { x: 2, y: 1.1, scale: 0.05 }
+                { x: -6.3, y: -4.2, scale: 0.15 },
+                { x: 6, y: -4.5, scale: 0.15 },
+                { x: -5.1, y: 3.6, scale: 0.15 },
+                { x: 6, y: 3.3, scale: 0.15 }
             ],
             red: [
-                { x: 0, y: -5, scale: 0.05 },
-                { x: 6, y: 0, scale: 0.05 },
-                { x: -6, y: 0, scale: 0.05 },
-                { x: 0, y: 3.2, scale: 0.05 },
-                { x: -10.1, y: 12, scale: 0.05 },
-                { x: -10.7, y: 11.2, scale: 0.05 }
+                { x: 0, y: -15, scale: 0.15 },
+                { x: 18, y: 0, scale: 0.15 },
+                { x: -18, y: 0, scale: 0.15 },
+                { x: 0, y: 9.6, scale: 0.15 },
+                { x: -30.3, y: 36, scale: 0.15 },
+                { x: -32.1, y: 33.6, scale: 0.15 }
             ],
             white: [
-                { x: -5, y: 2.5, scale: 0 },
-                { x: 3, y: 3.5, scale: 0 }
+                { x: -15, y: 7.5, scale: 0 },
+                { x: 9, y: 10.5, scale: 0 }
             ]
         };
 
@@ -118,14 +139,12 @@ export class MainBase {
         this.buildLightGroup('white', 0xffffff);
     }
 
-    resetFade() {
-        // No-op placeholder for clean reset handling
-    }
+    resetFade() {}
 
     buildLightGroup(category, colorHex) {
         this.lightConfigs[category].forEach((pos, idx) => {
             const markerGeo = new THREE.SphereGeometry(1, 16, 16);
-            const markerMat = new THREE.MeshBasicMaterial({ color: colorHex });
+            const markerMat = new THREE.MeshBasicMaterial({ color: colorHex, depthTest: true });
             const marker = new THREE.Mesh(markerGeo, markerMat);
             marker.position.set(pos.x, pos.y, 0.2);
             marker.scale.set(pos.scale, pos.scale, pos.scale);

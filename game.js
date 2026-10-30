@@ -1,3 +1,4 @@
+// game.js
 import * as THREE from 'three';
 import { setupScene } from './sceneSetup.js';
 import { OceanWater } from './ocean.js';
@@ -48,6 +49,14 @@ export class Game {
         this.cloudSystem = new CloudSystem(scene);
 
         this.player = new HelicopterPlayer(scene);
+
+        // --- Default Spawn Position on Helipad 1 ---
+        const defaultSpawnPos = new THREE.Vector3(8.41, 19.81, -6.54);
+
+        this.player.group.position.copy(defaultSpawnPos);
+        this.player.targetPosition.copy(defaultSpawnPos);
+        this.player.targetAltitude = defaultSpawnPos.y;
+
         this.weatherSystem = new WeatherSystem(scene, camera, this.ocean, this.player.audioManager);
 
         this.helicopterSystems = new HelicopterSystems(scene, this.player.group, this.player);
@@ -67,14 +76,6 @@ export class Game {
         this.helicopterSystems.tools['WINCH'].socket = this.networkManager.socket;
         this.missionManager.socket = this.networkManager.socket;
 
-        // Expose testing/debugging hooks to window for console overrides
-        window.testEnv = {
-            setWeather: (type) => this.weatherSystem.setWeatherOverride(type),
-            clearWeather: () => this.weatherSystem.clearWeatherOverride(),
-            setTime: (fraction0to1) => this.dayNightCycle.setTimeOverride(fraction0to1), // e.g. 0.25 = noon, 0.75 = midnight
-            clearTime: () => this.dayNightCycle.clearTimeOverride()
-        };
-
         this.initNetworkCallbacks();
         this.initEventListeners();
 
@@ -88,7 +89,6 @@ export class Game {
         const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
         const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef);
 
-        // --- Initialize Proximity Audio Source ---
         const remoteAudio = this.player.audioManager.createRemoteRotorSource();
 
         const shadowCanvas = document.createElement('canvas');
@@ -180,6 +180,33 @@ export class Game {
                     this.spawnRemotePlayer(id, players[id]);
                 }
             }
+
+            const helipads = [
+                new THREE.Vector3(8.41, 19.81, -6.54),
+                new THREE.Vector3(-10.28, 27.29, 3.74)
+            ];
+
+            let chosenPad = helipads[0];
+            for (const pad of helipads) {
+                let occupied = false;
+                for (const id in players) {
+                    if (id !== this.networkManager.getSocketId()) {
+                        const pPos = new THREE.Vector3(players[id].x, players[id].y, players[id].z);
+                        if (pPos.distanceTo(pad) < 3.0) {
+                            occupied = true;
+                            break;
+                        }
+                    }
+                }
+                if (!occupied) {
+                    chosenPad = pad;
+                    break;
+                }
+            }
+
+            this.player.group.position.copy(chosenPad);
+            this.player.targetPosition.copy(chosenPad);
+            this.player.targetAltitude = chosenPad.y;
         });
 
         this.networkManager.on('player-joined', (playerData) => {
@@ -229,7 +256,6 @@ export class Game {
 
         this.networkManager.on('player-disconnected', (id) => {
             if (this.remotePlayers[id]) {
-                // --- Stop and Clean Up Proximity Audio ---
                 if (this.remotePlayers[id].remoteAudio) {
                     this.player.audioManager.stopRemoteRotor(this.remotePlayers[id].remoteAudio);
                 }
@@ -384,7 +410,6 @@ export class Game {
             rp.group.position.lerp(rp.targetPos, delta * 10.0);
             rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
             
-            // --- Update Proximity Audio Position and Volume ---
             if (rp.remoteAudio && this.player.audioManager.audioCtx) {
                 const pos = rp.group.position;
                 this.player.audioManager.updateRemoteRotorPosition(rp.remoteAudio, pos.x, pos.y, pos.z);
@@ -403,7 +428,6 @@ export class Game {
                 rp.group.updateMatrixWorld(true);
             }
 
-    // Remote rotor rotation update
             if (rp.rotorSpeed > 0) {
                 if (rp.helicopter && rp.helicopter.rotorBlades) {
                     for (const blade of rp.helicopter.rotorBlades) {
