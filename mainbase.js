@@ -12,13 +12,26 @@ export class MainBase {
         scene.add(this.group);
 
         const textureLoader = new THREE.TextureLoader();
-        const baseTexture = textureLoader.load('mainbase.png', (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearFilter;
+        
+        this.baseTexture = new THREE.Texture();
+        this.snowTexture = new THREE.Texture();
+
+        this.loadTransparentTexture('mainbase.png', (tex) => {
+            this.baseTexture = tex;
+            if (this.material.map === this.baseTexture) {
+                this.material.needsUpdate = true;
+            }
+        });
+
+        this.loadTransparentTexture('mainbase_snow.png', (tex) => {
+            this.snowTexture = tex;
+            if (this.material.map === this.snowTexture) {
+                this.material.needsUpdate = true;
+            }
         });
 
         this.material = new THREE.MeshStandardMaterial({
-            map: baseTexture,
+            map: this.baseTexture,
             transparent: true,
             depthTest: true, 
             depthWrite: false,
@@ -372,6 +385,44 @@ export class MainBase {
     }
     -------------------------------------------------------------- */
 
+    loadTransparentTexture(url, callback) {
+        const img = new Image();
+        img.src = url;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            const bgR = data[0];
+            const bgG = data[1];
+            const bgB = data[2];
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                if (Math.abs(r - bgR) < 20 && Math.abs(g - bgG) < 20 && Math.abs(b - bgB) < 20) {
+                    data[i + 3] = 0;
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+
+            if (callback) callback(texture);
+        };
+    }
+
     resetFade() {}
 
     buildLightGroup(category, colorHex) {
@@ -398,7 +449,15 @@ export class MainBase {
         });
     }
 
-    update(delta, nightFactor, cameraQuaternion, searchLightSystem = null) {
+    update(delta, nightFactor, cameraQuaternion, searchLightSystem = null, weather = '') {
+        const weatherStr = (weather || window.weather || window.currentWeather || '').toString().toUpperCase();
+        const hasSnow = weatherStr.includes('SNOW');
+        const targetMap = hasSnow ? this.snowTexture : this.baseTexture;
+        if (this.material.map !== targetMap) {
+            this.material.map = targetMap;
+            this.material.needsUpdate = true;
+        }
+
         let baseColorFactor = 1 - nightFactor * 0.4;
         let baseBlueFactor = 1 - nightFactor * 0.3;
 

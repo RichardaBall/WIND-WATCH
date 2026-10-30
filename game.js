@@ -456,7 +456,7 @@ export class Game {
         this.camera.position.copy(focusPoint).add(cameraOffset);
         this.camera.lookAt(focusPoint);
 
-        this.mainBase.update(delta, nightFactor, this.camera.quaternion, this.searchLightSystem, false);
+        this.mainBase.update(delta, nightFactor, this.camera.quaternion, this.searchLightSystem, activeWeather);
         this.windFarm.update(delta, this.camera.quaternion);
         
         this.player.mesh.quaternion.copy(this.camera.quaternion);
