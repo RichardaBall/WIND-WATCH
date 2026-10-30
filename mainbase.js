@@ -114,47 +114,49 @@ export class MainBase {
 
         this.lightConfigs = {
             green: [
-                { x: -6.3, y: -4.2, scale: 0.15 },
-                { x: 6, y: -4.5, scale: 0.15 },
-                { x: -5.1, y: 3.6, scale: 0.15 },
-                { x: 6, y: 3.3, scale: 0.15 }
+                { x: 9.21, y: -2.63, z: 0.1, scale: 0.15 },
+                { x: 12.26, y: 1.19, z: 0.1, scale: 0.15 },
+                { x: 7.52, y: 0.56, z: 0.1, scale: 0.15 },
+                { x: 14.0, y: -1.71, z: 0.1, scale: 0.15 },
+                { x: -11.81, y: 6.49, z: 0.1, scale: 0.15 },
+                { x: -12.71, y: 9.1, z: 0.1, scale: 0.15 },
+                { x: -7.44, y: 7.03, z: 0.1, scale: 0.15 },
+                { x: -8.18, y: 9.53, z: 0.1, scale: 0.15 }
             ],
             red: [
-                { x: 0, y: -15, scale: 0.15 },
-                { x: 18, y: 0, scale: 0.15 },
-                { x: -18, y: 0, scale: 0.15 },
-                { x: 0, y: 9.6, scale: 0.15 },
-                { x: -30.3, y: 36, scale: 0.15 },
-                { x: -32.1, y: 33.6, scale: 0.15 }
-            ],
-            white: [
-                { x: -15, y: 7.5, scale: 0 },
-                { x: 9, y: 10.5, scale: 0 }
+                { x: 13.34, y: -6.22, z: 0.1, scale: 0.15 },
+                { x: 18.45, y: 0.05, z: 0.1, scale: 0.15 },
+                { x: 2.37, y: -1.55, z: 0.1, scale: 0.15 },
+                { x: 8.29, y: 4.18, z: 0.1, scale: 0.15 },
+                { x: -8.69, y: 3.51, z: 0.1, scale: 0.15 },
+                { x: -11.19, y: 11.92, z: 0.1, scale: 0.15 },
+                { x: -17.8, y: 7.27, z: 0.1, scale: 0.15 },
+                { x: -2.75, y: 8.55, z: 0.1, scale: 0.15 }
             ]
         };
 
         this.allLights = [];
         this.buildLightGroup('green', 0x00ff66);
         this.buildLightGroup('red', 0xff0033);
-        this.buildLightGroup('white', 0xffffff);
     }
 
     resetFade() {}
 
     buildLightGroup(category, colorHex) {
         this.lightConfigs[category].forEach((pos, idx) => {
+            const zVal = pos.z !== undefined ? pos.z : 0.2;
             const markerGeo = new THREE.SphereGeometry(1, 16, 16);
             const markerMat = new THREE.MeshBasicMaterial({ color: colorHex, depthTest: true });
             const marker = new THREE.Mesh(markerGeo, markerMat);
-            marker.position.set(pos.x, pos.y, 0.2);
+            marker.position.set(pos.x, pos.y, zVal);
             marker.scale.set(pos.scale, pos.scale, pos.scale);
             this.group.add(marker);
 
             const pointLight = new THREE.PointLight(colorHex, 0.0, 15);
-            pointLight.position.set(pos.x, pos.y, 0.2);
+            pointLight.position.set(pos.x, pos.y, zVal);
             this.group.add(pointLight);
 
-            this.allLights.push({ category, index: idx, marker, pointLight });
+            this.allLights.push({ category, index: idx, marker, pointLight, config: pos });
         });
     }
 
@@ -238,10 +240,10 @@ export class MainBase {
             let y = tempVec.y;
 
             const wave = Math.sin(elapsedTime * this.foamParams.waveSpeed * 3.0 + phase) * this.foamParams.waveAmplitude;
-            const len = Math.sqrt(x * x + y * y);
-            if (len > 0.001) {
-                x += (x / len) * wave;
-                y += (y / len) * wave;
+            const netLen = Math.sqrt(x * x + y * y);
+            if (netLen > 0.001) {
+                x += (x / netLen) * wave;
+                y += (y / netLen) * wave;
             }
 
             const z = Math.sin(elapsedTime * 3.0 + i) * 0.08;
