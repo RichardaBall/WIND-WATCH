@@ -207,8 +207,17 @@ export default class HelicopterPlayer {
         this.group.position.set(8.41, 19.81, -6.54);
         this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
         this.maxSpeed = 37.5;
-        this.currentSpeed = 0; 
+        this.currentSpeed = 0;
         this.isMoving = false;
+
+        // Momentum: direction of travel is kept between frames, so turns at speed are arcs, not snaps
+        this.moveHeading = new THREE.Vector2(0, -1);
+        this.acceleration = 40.0;      // speed up / brake rate at empty weight
+        this.turnAcceleration = 40.0;  // sideways rate at empty weight (arc radius = speed^2 / this)
+        this.maxTurnRate = 6.0;        // radians per second, when nearly hovering
+        this.fuelWeight = 0.3;         // full tank, as a share of the empty helicopter
+        this.waterWeight = 1.2;        // full bucket, as a share of the empty helicopter
+        this.loadSpeedLoss = 0.1;      // top speed lost per extra helicopter-weight (15% at full load)
 
         this.engineState = 'OFF'; 
         this.targetAltitude = 19.81;  
@@ -654,34 +663,45 @@ export default class HelicopterPlayer {
 
             if (distance > 0.2) {
                 const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
-                const targetMaxSpeed = isSlow ? this.maxSpeed * 0.5 : this.maxSpeed;
-
-                let desiredSpeed = targetMaxSpeed;
-                const slowingRadius = 15.0;
-                if (distance < slowingRadius) {
-                    desiredSpeed = targetMaxSpeed * (distance / slowingRadius);
-                    desiredSpeed = Math.max(desiredSpeed, 2.0);
-                }
-
-                const accelerationRate = 25.0; 
-                // Capped at 1 so a slow frame (below ~25 fps) cannot overshoot and make the speed oscillate
-                this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, Math.min(1, delta * accelerationRate));
+                const load = this.getLoadFactor();
+                const loadedMaxSpeed = this.maxSpeed * (1.0 - this.loadSpeedLoss * (load - 1.0));
+                const targetMaxSpeed = isSlow ? loadedMaxSpeed * 0.5 : loadedMaxSpeed;
+                const accel = this.acceleration / load;
 
                 const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
+                const heading = this.moveHeading;
+
+                // Nearly hovering: can set off in any direction. At speed: turn rate limited by sideways grip, so it carves an arc
+                if (this.currentSpeed < 1.0) {
+                    heading.copy(moveDir);
+                } else {
+                    const turnAngle = Math.atan2(heading.x * moveDir.y - heading.y * moveDir.x, heading.dot(moveDir));
+                    const maxTurn = Math.min(this.maxTurnRate, (this.turnAcceleration / load) / this.currentSpeed) * delta;
+                    heading.rotateAround(this._scratchVector2D_1.set(0, 0), THREE.MathUtils.clamp(turnAngle, -maxTurn, maxTurn));
+                }
+
+                // Brake in time to stop at the target, and slow down when the target is off the nose (full stop if behind)
+                const offNose = Math.atan2(heading.x * moveDir.y - heading.y * moveDir.x, heading.dot(moveDir));
+                let desiredSpeed = Math.min(targetMaxSpeed, Math.sqrt(2.0 * accel * 0.8 * distance));
+                desiredSpeed = Math.max(desiredSpeed, 2.0) * Math.max(0, Math.cos(offNose));
+
+                const speedChange = THREE.MathUtils.clamp(desiredSpeed - this.currentSpeed, -accel * delta, accel * delta);
+                this.currentSpeed += speedChange;
+
                 const step = this.currentSpeed * delta;
-                
-                if (distance < step) {
+
+                if (distance < step && Math.cos(offNose) > 0.9) {
                     currentXZ.copy(targetXZ);
                     this.currentSpeed = 0;
                 } else {
-                    currentXZ.addScaledVector(moveDir, step);
+                    currentXZ.addScaledVector(heading, step);
                 }
-                
+
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
 
-                // Calculate angle clockwise from North where Index 2 = North (0 radians)
-                const angle = Math.atan2(moveDir.x, -moveDir.y);
+                // Calculate angle clockwise from North where Index 2 = North (0 radians); sprite follows direction of travel
+                const angle = Math.atan2(heading.x, -heading.y);
                 const stepSize = (Math.PI * 2) / this.totalFrames;
 
                 // Only change sprite frame once the heading is clearly past the edge of the current frame's sector
@@ -717,6 +737,13 @@ export default class HelicopterPlayer {
         const targetY = currentPos.y - 5.5;
         
         this.searchLightTarget.position.set(targetX, targetY, targetZ);
+    }
+
+    // Empty helicopter = 1.0; fuel and water add to it. Remote helicopters have no systems and stay at 1.0
+    getLoadFactor() {
+        const systems = this.helicopterSystems;
+        if (!systems) return 1.0;
+        return 1.0 + this.fuelWeight * (systems.fuel / systems.maxFuel) + this.waterWeight * (systems.water / systems.maxWater);
     }
 
     getPosition() {
