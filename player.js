@@ -47,6 +47,10 @@ export default class HelicopterPlayer {
         });
 
         this.mesh = new THREE.Mesh(geometry, this.material);
+        // The sprite is a flat picture facing the camera, centred on the helicopter, so its lower half (skids, body)
+        // sits below the landing height and a 3D deck (the ship) cuts it off. Moving it towards the camera (which
+        // follows at +50, +50, +50) keeps it in front; the camera is orthographic, so nothing moves or scales on screen.
+        this.mesh.position.set(8, 8, 8);
         this.group.add(this.mesh);
 
         this.rotorGroup = new THREE.Group();
