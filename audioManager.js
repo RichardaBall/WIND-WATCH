@@ -21,18 +21,25 @@ export class AudioManager {
         this.windNoiseSource = null;
         this.windGainNode = null;
 
-        // Auto-unlock audio context on user interaction
-        const unlockAudio = () => {
+        // Timer and interval tracking to prevent leaks
+        this.fadeInterval = null;
+        this.rainTimeout = null;
+        this.windTimeout = null;
+        this.sprayTimeout = null;
+        this.winchTimeout = null;
+        this.rotorTimeout = null;
+
+        // Auto-unlock audio context on user interaction with guaranteed cleanup reference
+        this.unlockAudioHandler = () => {
             if (this.audioCtx && this.audioCtx.state === 'suspended') {
                 this.audioCtx.resume();
             }
             if (this.audioCtx && this.audioCtx.state === 'running') {
-                window.removeEventListener('pointerdown', unlockAudio);
-                window.removeEventListener('keydown', unlockAudio);
+                this.removeUnlockListeners();
             }
         };
-        window.addEventListener('pointerdown', unlockAudio);
-        window.addEventListener('keydown', unlockAudio);
+        window.addEventListener('pointerdown', this.unlockAudioHandler);
+        window.addEventListener('keydown', this.unlockAudioHandler);
 
         // Load continuous rotor sound buffer
         fetch('rotorsound.mp3')
@@ -44,27 +51,42 @@ export class AudioManager {
             .catch(e => console.warn("Error loading rotor sound buffer:", e));
     }
 
+    removeUnlockListeners() {
+        if (this.unlockAudioHandler) {
+            window.removeEventListener('pointerdown', this.unlockAudioHandler);
+            window.removeEventListener('keydown', this.unlockAudioHandler);
+        }
+    }
+
     playLoadingMusic() {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.loadingMusic.currentTime = 0;
         this.loadingMusic.volume = 1.0;
-        this.loadingMusic.play().catch(e => console.log("Loading music play prevented:", e));
+        this.loadingMusic.play().catch(() => {});
     }
 
     fadeOutLoadingMusic(duration = 1.0) {
         if (this.loadingMusic.paused) return;
+
+        // Clear any existing fade interval to prevent overlapping timers
+        if (this.fadeInterval) {
+            clearInterval(this.fadeInterval);
+            this.fadeInterval = null;
+        }
+
         const steps = 20;
         const stepTime = (duration * 1000) / steps;
         const volumeStep = this.loadingMusic.volume / steps;
 
-        const fadeInterval = setInterval(() => {
+        this.fadeInterval = setInterval(() => {
             if (this.loadingMusic.volume > volumeStep) {
                 this.loadingMusic.volume -= volumeStep;
             } else {
                 this.loadingMusic.volume = 0;
                 this.loadingMusic.pause();
                 this.loadingMusic.currentTime = 0;
-                clearInterval(fadeInterval);
+                clearInterval(this.fadeInterval);
+                this.fadeInterval = null;
             }
         }, stepTime);
     }
@@ -90,14 +112,14 @@ export class AudioManager {
 
         this.startupAudio.play().then(() => {
             checkOverlap();
-        }).catch(e => console.log("Startup audio play prevented:", e));
+        }).catch(() => {});
     }
 
     playShutdown(onBlendingPoint, onEnded) {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.shutdownAudio.onended = onEnded;
         this.shutdownAudio.currentTime = 0;
-        this.shutdownAudio.play().catch(e => console.log("Shutdown audio play prevented:", e));
+        this.shutdownAudio.play().catch(() => {});
 
         if (typeof onBlendingPoint === 'function') {
             onBlendingPoint(); // Trigger shutdown audio overlapping with running rotor
@@ -107,13 +129,13 @@ export class AudioManager {
     playGear() {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.gearAudio.currentTime = 0;
-        this.gearAudio.play().catch(e => console.log("Gear audio play prevented:", e));
+        this.gearAudio.play().catch(() => {});
     }
 
     playLowFuel() {
         if (this.audioCtx && this.audioCtx.state === 'suspended') this.audioCtx.resume();
         this.lowFuelAudio.currentTime = 0;
-        this.lowFuelAudio.play().catch(e => console.log("Low fuel audio play prevented:", e));
+        this.lowFuelAudio.play().catch(() => {});
     }
 
     playExplosion() {
@@ -279,16 +301,18 @@ export class AudioManager {
     stopRain() {
         if (this.rainNoiseSource && this.rainGainNode) {
             try {
+                if (this.rainTimeout) clearTimeout(this.rainTimeout);
                 const now = this.audioCtx.currentTime;
                 this.rainGainNode.gain.setValueAtTime(this.rainGainNode.gain.value, now);
                 this.rainGainNode.gain.linearRampToValueAtTime(0.001, now + 0.5);
-                setTimeout(() => {
+                this.rainTimeout = setTimeout(() => {
                     if (this.rainNoiseSource) {
                         try { this.rainNoiseSource.stop(); } catch(e) {}
                         this.rainNoiseSource.disconnect();
                         this.rainNoiseSource = null;
                         this.rainGainNode = null;
                     }
+                    this.rainTimeout = null;
                 }, 500);
             } catch (e) {
                 this.rainNoiseSource = null;
@@ -341,16 +365,18 @@ export class AudioManager {
     stopWind() {
         if (this.windNoiseSource && this.windGainNode) {
             try {
+                if (this.windTimeout) clearTimeout(this.windTimeout);
                 const now = this.audioCtx.currentTime;
                 this.windGainNode.gain.setValueAtTime(this.windGainNode.gain.value, now);
                 this.windGainNode.gain.linearRampToValueAtTime(0.001, now + 0.5);
-                setTimeout(() => {
+                this.windTimeout = setTimeout(() => {
                     if (this.windNoiseSource) {
                         try { this.windNoiseSource.stop(); } catch(e) {}
                         this.windNoiseSource.disconnect();
                         this.windNoiseSource = null;
                         this.windGainNode = null;
                     }
+                    this.windTimeout = null;
                 }, 500);
             } catch (e) {
                 this.windNoiseSource = null;
@@ -399,17 +425,19 @@ export class AudioManager {
     stopWaterSpray() {
         if (this.sprayNoiseSource && this.sprayGainNode) {
             try {
+                if (this.sprayTimeout) clearTimeout(this.sprayTimeout);
                 const now = this.audioCtx.currentTime;
                 this.sprayGainNode.gain.setValueAtTime(this.sprayGainNode.gain.value, now);
                 this.sprayGainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
 
-                setTimeout(() => {
+                this.sprayTimeout = setTimeout(() => {
                     if (this.sprayNoiseSource) {
                         try { this.sprayNoiseSource.stop(); } catch(e) {}
                         this.sprayNoiseSource.disconnect();
                         this.sprayNoiseSource = null;
                         this.sprayGainNode = null;
                     }
+                    this.sprayTimeout = null;
                 }, 100);
             } catch (e) {
                 this.sprayNoiseSource = null;
@@ -458,17 +486,19 @@ export class AudioManager {
     stopWinch() {
         if (this.winchNoiseSource && this.winchGainNode) {
             try {
+                if (this.winchTimeout) clearTimeout(this.winchTimeout);
                 const now = this.audioCtx.currentTime;
                 this.winchGainNode.gain.setValueAtTime(this.winchGainNode.gain.value, now);
                 this.winchGainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
 
-                setTimeout(() => {
+                this.winchTimeout = setTimeout(() => {
                     if (this.winchNoiseSource) {
                         try { this.winchNoiseSource.stop(); } catch(e) {}
                         this.winchNoiseSource.disconnect();
                         this.winchNoiseSource = null;
                         this.winchGainNode = null;
                     }
+                    this.winchTimeout = null;
                 }, 100);
             } catch (e) {
                 this.winchNoiseSource = null;
@@ -514,18 +544,20 @@ export class AudioManager {
     stopRotor() {
         if (this.rotorSource && this.audioCtx) {
             try {
+                if (this.rotorTimeout) clearTimeout(this.rotorTimeout);
                 const now = this.audioCtx.currentTime;
                 if (this.rotorGainNode) {
                     this.rotorGainNode.gain.setValueAtTime(this.rotorGainNode.gain.value, now);
                     this.rotorGainNode.gain.linearRampToValueAtTime(0.001, now + 1.2);
                 }
-                setTimeout(() => {
+                this.rotorTimeout = setTimeout(() => {
                     if (this.rotorSource) {
                         try { this.rotorSource.stop(); } catch(e) {}
                         this.rotorSource.disconnect();
                         this.rotorSource = null;
                         this.rotorGainNode = null;
                     }
+                    this.rotorTimeout = null;
                 }, 1200);
             } catch (e) {
                 this.rotorSource = null;

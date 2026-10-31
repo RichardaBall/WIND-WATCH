@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { setupScene } from './sceneSetup.js';
 import { OceanWater } from './ocean.js';
 import { MainBase } from './mainbase.js';
-import { HelicopterPlayer } from './player.js';
+import HelicopterPlayer from './player.js';
 import { HelicopterSystems } from './helicopterSystems.js';
 import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
@@ -32,6 +32,11 @@ export class Game {
         this.clock = new THREE.Clock();
         this.networkTimer = 0;
         this.logicThrottleTimer = 0;
+
+        // Pre-allocated scratch vectors for update/animate loop
+        this._scratchVector1 = new THREE.Vector3();
+        this._scratchVector2 = new THREE.Vector3();
+        this._scratchVector3 = new THREE.Vector3();
     }
 
     init() {
@@ -73,7 +78,9 @@ export class Game {
         this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, this.searchLightSystem, this.dayNightCycle);
 
         this.networkManager = new NetworkManager();
-        this.helicopterSystems.tools['WINCH'].socket = this.networkManager.socket;
+        if (this.helicopterSystems.tools['WINCH']) {
+            this.helicopterSystems.tools['WINCH'].socket = this.networkManager.socket;
+        }
         this.missionManager.socket = this.networkManager.socket;
 
         this.initNetworkCallbacks();
@@ -84,10 +91,11 @@ export class Game {
     }
 
     spawnRemotePlayer(id, data) {
+        if (!data) return;
         const remoteHeli = new HelicopterPlayer(this.scene);
         const remotePlayerRef = { gearDown: data.gearDown ?? true };
         const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
-        const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef);
+        const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
 
         const remoteAudio = this.player.audioManager.createRemoteRotorSource();
 
@@ -112,7 +120,7 @@ export class Game {
         });
         const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
         shadowMesh.rotation.x = -Math.PI / 2;
-        shadowMesh.position.set(data.x, 0.2, data.z);
+        shadowMesh.position.set(data.x || 0, 0.2, data.z || 0);
         this.scene.add(shadowMesh);
 
         const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
@@ -159,7 +167,7 @@ export class Game {
             searchLightTarget: searchLightTarget,
             lightPoolMesh: lightPoolMesh,
             shadowMesh: shadowMesh,
-            targetPos: new THREE.Vector3(data.x, data.y, data.z),
+            targetPos: new THREE.Vector3(data.x || 0, data.y || 0, data.z || 0),
             targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
             targetFrame: data.currentFrame || 5,
             rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
@@ -174,9 +182,14 @@ export class Game {
     }
 
     initNetworkCallbacks() {
+        if (!this.networkManager || !this.networkManager.socket) return;
+        const socket = this.networkManager.socket;
+
         this.networkManager.on('current-players', (players) => {
+            if (!players || typeof players !== 'object') return;
+            const socketId = socket && socket.connected ? socket.id : null;
             for (const id in players) {
-                if (id !== this.networkManager.getSocketId()) {
+                if (id !== socketId) {
                     this.spawnRemotePlayer(id, players[id]);
                 }
             }
@@ -190,8 +203,8 @@ export class Game {
             for (const pad of helipads) {
                 let occupied = false;
                 for (const id in players) {
-                    if (id !== this.networkManager.getSocketId()) {
-                        const pPos = new THREE.Vector3(players[id].x, players[id].y, players[id].z);
+                    if (id !== socketId && players[id]) {
+                        const pPos = new THREE.Vector3(players[id].x || 0, players[id].y || 0, players[id].z || 0);
                         if (pPos.distanceTo(pad) < 3.0) {
                             occupied = true;
                             break;
@@ -204,41 +217,49 @@ export class Game {
                 }
             }
 
-            this.player.group.position.copy(chosenPad);
-            this.player.targetPosition.copy(chosenPad);
-            this.player.targetAltitude = chosenPad.y;
+            if (this.player && this.player.group) {
+                this.player.group.position.copy(chosenPad);
+                this.player.targetPosition.copy(chosenPad);
+                this.player.targetAltitude = chosenPad.y;
+            }
         });
 
         this.networkManager.on('player-joined', (playerData) => {
-            this.spawnRemotePlayer(playerData.id, playerData);
+            if (playerData && playerData.id) {
+                this.spawnRemotePlayer(playerData.id, playerData);
+            }
         });
 
         this.networkManager.on('remote-player-update', (data) => {
-            if (this.remotePlayers[data.id]) {
+            if (data && data.id && this.remotePlayers[data.id]) {
                 const rp = this.remotePlayers[data.id];
-                rp.targetPos.set(data.x, data.y, data.z);
-                rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
-                rp.targetFrame = data.currentFrame;
+                if (data.x !== undefined && data.y !== undefined && data.z !== undefined) {
+                    rp.targetPos.set(data.x, data.y, data.z);
+                }
+                if (data.qx !== undefined && data.qy !== undefined && data.qz !== undefined && data.qw !== undefined) {
+                    rp.targetQuaternion.set(data.qx, data.qy, data.qz, data.qw);
+                }
+                if (data.currentFrame !== undefined) rp.targetFrame = data.currentFrame;
                 rp.rotorSpeed = data.rotorSpeed !== undefined ? data.rotorSpeed : 0;
-                rp.gearDown = data.gearDown;
+                rp.gearDown = data.gearDown ?? rp.gearDown;
                 if (rp.playerRef) {
-                    rp.playerRef.gearDown = data.gearDown;
+                    rp.playerRef.gearDown = rp.gearDown;
                 }
                 rp.winchState = data.winchState || 'STOWED';
-                rp.isDroppingWater = data.isDroppingWater;
-                rp.searchLightState = data.searchLightState;
+                rp.isDroppingWater = !!data.isDroppingWater;
+                rp.searchLightState = data.searchLightState || 'OFF';
 
-                if (data.slX !== undefined) {
+                if (data.slX !== undefined && data.slY !== undefined && data.slZ !== undefined) {
                     rp.targetSearchLightPos.set(data.slX, data.slY, data.slZ);
                 }
 
-                if (rp.helicopter) {
-                    if (rp.helicopter.gearDown !== data.gearDown) {
-                        rp.helicopter.gearDown = data.gearDown;
+                if (rp.helicopter && rp.helicopter.material) {
+                    if (rp.helicopter.gearDown !== rp.gearDown) {
+                        rp.helicopter.gearDown = rp.gearDown;
                         const currentOffset = rp.helicopter.material.map ? rp.helicopter.material.map.offset.x : 0;
-                        if (data.gearDown && rp.helicopter.gearDownTex) {
+                        if (rp.gearDown && rp.helicopter.gearDownTex) {
                             rp.helicopter.material.map = rp.helicopter.gearDownTex;
-                        } else if (!data.gearDown && rp.helicopter.gearUpTex) {
+                        } else if (!rp.gearDown && rp.helicopter.gearUpTex) {
                             rp.helicopter.material.map = rp.helicopter.gearUpTex;
                         }
                         if (rp.helicopter.material.map) {
@@ -255,37 +276,41 @@ export class Game {
         });
 
         this.networkManager.on('player-disconnected', (id) => {
-            if (this.remotePlayers[id]) {
-                if (this.remotePlayers[id].remoteAudio) {
-                    this.player.audioManager.stopRemoteRotor(this.remotePlayers[id].remoteAudio);
+            if (id && this.remotePlayers[id]) {
+                const rp = this.remotePlayers[id];
+                if (rp.remoteAudio && this.player && this.player.audioManager) {
+                    this.player.audioManager.stopRemoteRotor(rp.remoteAudio);
                 }
 
-                this.scene.remove(this.remotePlayers[id].group);
-                if (this.remotePlayers[id].shadowMesh) this.scene.remove(this.remotePlayers[id].shadowMesh);
-                if (this.remotePlayers[id].winchSystem && this.remotePlayers[id].winchSystem.cableLine) {
-                    this.scene.remove(this.remotePlayers[id].winchSystem.cableLine);
-                    this.scene.remove(this.remotePlayers[id].winchSystem.hookMesh);
-                    this.scene.remove(this.remotePlayers[id].winchSystem.rotorWashSystem);
+                if (rp.group) this.scene.remove(rp.group);
+                if (rp.shadowMesh) this.scene.remove(rp.shadowMesh);
+                if (rp.winchSystem && rp.winchSystem.cableLine) {
+                    this.scene.remove(rp.winchSystem.cableLine);
+                    this.scene.remove(rp.winchSystem.hookMesh);
+                    this.scene.remove(rp.winchSystem.rotorWashSystem);
                 }
-                if (this.remotePlayers[id].waterSystem && this.remotePlayers[id].waterSystem.particleSystem) {
-                    this.scene.remove(this.remotePlayers[id].waterSystem.particleSystem);
-                    this.scene.remove(this.remotePlayers[id].waterSystem.splashSystem);
+                if (rp.waterSystem && rp.waterSystem.particleSystem) {
+                    this.scene.remove(rp.waterSystem.particleSystem);
+                    this.scene.remove(rp.waterSystem.splashSystem);
                 }
-                if (this.remotePlayers[id].searchLight) this.scene.remove(this.remotePlayers[id].searchLight);
-                if (this.remotePlayers[id].searchLightTarget) this.scene.remove(this.remotePlayers[id].searchLightTarget);
-                if (this.remotePlayers[id].lightPoolMesh) this.scene.remove(this.remotePlayers[id].lightPoolMesh);
-                this.navRadar.removeMarker(`remote_${id}`);
+                if (rp.searchLight) this.scene.remove(rp.searchLight);
+                if (rp.searchLightTarget) this.scene.remove(rp.searchLightTarget);
+                if (rp.lightPoolMesh) this.scene.remove(rp.lightPoolMesh);
+                
+                if (this.navRadar) {
+                    this.navRadar.removeMarker(`remote_${id}`);
+                }
                 delete this.remotePlayers[id];
             }
         });
 
         this.networkManager.on('sync-mission', (missionData) => {
             if (this.mainBase && typeof this.mainBase.resetFade === 'function') this.mainBase.resetFade();
-            if (this.missionManager) this.missionManager.spawnSpecificMission(missionData.type, missionData);
+            if (this.missionManager && missionData) this.missionManager.spawnSpecificMission(missionData.type, missionData);
         });
 
         this.networkManager.on('mission-state-updated', (missionState) => {
-            if (this.missionManager) this.missionManager.applyMissionState(missionState);
+            if (this.missionManager && missionState) this.missionManager.applyMissionState(missionState);
         });
 
         this.networkManager.on('mission-completed', () => {
@@ -296,7 +321,7 @@ export class Game {
 
     initEventListeners() {
         window.addEventListener('toggle-settings', (e) => {
-            const isOpen = e.detail.active;
+            const isOpen = e.detail && e.detail.active;
             if (this.settings && typeof this.settings.setVisible === 'function') {
                 this.settings.setVisible(isOpen);
             }
@@ -307,28 +332,32 @@ export class Game {
         requestAnimationFrame(this.animate);
         const delta = Math.min(this.clock.getDelta(), 0.1);
 
-        if (this.inputManager.isDragging()) {
+        if (this.inputManager && this.inputManager.isDragging()) {
             this.inputManager.updateTarget();
         }
 
-        const nightFactor = this.dayNightCycle.update(delta);
-        this.weatherSystem.update(delta);
+        const nightFactor = this.dayNightCycle ? this.dayNightCycle.update(delta) : 0;
+        if (this.weatherSystem) this.weatherSystem.update(delta);
         
-        const windForce = this.weatherSystem.getWindForce();
-        const activeWeather = this.weatherSystem.targetWeather;
-        this.cloudSystem.update(delta, nightFactor, this.camera.quaternion, windForce, activeWeather);
+        const windForce = this.weatherSystem ? this.weatherSystem.getWindForce() : this._scratchVector1.set(0, 0, 0);
+        const activeWeather = this.weatherSystem ? this.weatherSystem.targetWeather : 'CLEAR';
+        if (this.cloudSystem && this.camera) {
+            this.cloudSystem.update(delta, nightFactor, this.camera.quaternion, windForce, activeWeather);
+        }
 
-        this.player.update(delta, nightFactor, windForce);
+        if (this.player) {
+            this.player.update(delta, nightFactor, windForce);
+        }
         
         this.networkTimer += delta;
-        if (this.networkTimer >= 0.05) {
+        if (this.networkTimer >= 0.05 && this.networkManager && this.networkManager.isConnected() && this.player) {
             this.networkTimer = 0;
             const pos = this.player.getPosition();
             const currentRotorSpeed = this.player.rotorSpeed;
             const currentGearDown = this.player.gearDown;
             const currentWinchState = this.player.winchState;
-            const currentWaterActive = this.helicopterSystems.isWaterActive();
-            const currentLightState = this.searchLightSystem.state;
+            const currentWaterActive = this.helicopterSystems ? this.helicopterSystems.isWaterActive() : false;
+            const currentLightState = this.searchLightSystem ? this.searchLightSystem.state : 'OFF';
 
             const hasMoved = pos.distanceToSquared(this.lastSentPos) > 0.001 || this.player.isMoving;
             const stateChanged = 
@@ -360,24 +389,30 @@ export class Game {
                     winchState: currentWinchState,
                     isDroppingWater: currentWaterActive,
                     searchLightState: currentLightState,
-                    slX: this.searchLightSystem.lightTarget.position.x,
-                    slY: this.searchLightSystem.lightTarget.position.y,
-                    slZ: this.searchLightSystem.lightTarget.position.z
+                    slX: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.x : 0,
+                    slY: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.y : 0,
+                    slZ: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.z : 0
                 });
             }
         }
 
         for (const id in this.remotePlayers) {
             const rp = this.remotePlayers[id];
+            if (!rp || !rp.group || !rp.targetPos) continue;
+
             rp.group.position.lerp(rp.targetPos, delta * 10.0);
-            rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
+            if (rp.helicopter && rp.helicopter.mesh && rp.targetQuaternion) {
+                rp.helicopter.mesh.quaternion.slerp(rp.targetQuaternion, delta * 10.0);
+            }
             
-            if (rp.remoteAudio && this.player.audioManager.audioCtx) {
+            if (rp.remoteAudio && this.player && this.player.audioManager && this.player.audioManager.audioCtx) {
                 const pos = rp.group.position;
                 this.player.audioManager.updateRemoteRotorPosition(rp.remoteAudio, pos.x, pos.y, pos.z);
                 
                 const targetGain = rp.rotorSpeed > 5 ? 1.5 : 0.0;
-                rp.remoteAudio.gainNode.gain.setTargetAtTime(targetGain, this.player.audioManager.audioCtx.currentTime, 0.1);
+                if (rp.remoteAudio.gainNode && rp.remoteAudio.gainNode.gain) {
+                    rp.remoteAudio.gainNode.gain.setTargetAtTime(targetGain, this.player.audioManager.audioCtx.currentTime, 0.1);
+                }
             }
 
             if (rp.shadowMesh) {
@@ -390,15 +425,13 @@ export class Game {
                 rp.group.updateMatrixWorld(true);
             }
 
-            if (rp.rotorSpeed > 0) {
-                if (rp.helicopter && rp.helicopter.rotorBlades) {
-                    for (const blade of rp.helicopter.rotorBlades) {
-                        blade.rotation.z += rp.rotorSpeed * delta;
-                    }
+            if (rp.rotorSpeed > 0 && rp.helicopter && rp.helicopter.rotorBlades) {
+                for (const blade of rp.helicopter.rotorBlades) {
+                    if (blade) blade.rotation.z += rp.rotorSpeed * delta;
                 }
             }
 
-            if (rp.helicopter && rp.helicopter.material && rp.helicopter.material.map) {
+            if (rp.helicopter && rp.helicopter.material && rp.helicopter.material.map && rp.helicopter.totalFrames) {
                 const frameOffset = rp.targetFrame * (1 / rp.helicopter.totalFrames);
                 rp.helicopter.material.map.offset.x = frameOffset;
                 if (rp.helicopter.material.emissiveMap) {
@@ -407,7 +440,7 @@ export class Game {
             }
 
             if (rp.waterSystem) rp.waterSystem.update(delta);
-            if (rp.winchSystem) {
+            if (rp.winchSystem && rp.helicopter && rp.helicopter.mesh) {
                 if (rp.winchState === 'DEPLOYED' || rp.winchState === 'LOWERING') {
                     rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 1.0, delta * 2.0);
                 } else {
@@ -416,17 +449,19 @@ export class Game {
                 rp.winchSystem.update(delta, rp.helicopter.mesh.quaternion);
             }
 
-            if (rp.searchLight) {
+            if (rp.searchLight && rp.lightPoolMesh) {
                 if (rp.searchLightState !== 'OFF') {
                     rp.searchLight.intensity = nightFactor * 90.0;
                     rp.lightPoolMesh.material.opacity = nightFactor * 0.9;
                     
-                    rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, delta * 15.0);
-                    rp.lightPoolMesh.position.set(
-                        rp.searchLightTarget.position.x, 
-                        0.05, 
-                        rp.searchLightTarget.position.z
-                    );
+                    if (rp.searchLightTarget && rp.targetSearchLightPos) {
+                        rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, delta * 15.0);
+                        rp.lightPoolMesh.position.set(
+                            rp.searchLightTarget.position.x, 
+                            0.05, 
+                            rp.searchLightTarget.position.z
+                        );
+                    }
                 } else {
                     rp.searchLight.intensity = 0.0;
                     rp.lightPoolMesh.material.opacity = 0.0;
@@ -434,32 +469,48 @@ export class Game {
             }
         }
 
-        this.helicopterSystems.update(delta);
-        this.collisionManager.update();
-        this.missionManager.update(delta, this.player.getPosition(), nightFactor);
-        this.hudManager.update(this.helicopterSystems, this.searchLightSystem);
+        if (this.helicopterSystems) this.helicopterSystems.update(delta);
+        if (this.collisionManager) this.collisionManager.update();
+        if (this.missionManager && this.player) {
+            this.missionManager.update(delta, this.player.getPosition(), nightFactor);
+        }
+        if (this.hudManager && this.helicopterSystems && this.searchLightSystem) {
+            this.hudManager.update(this.helicopterSystems, this.searchLightSystem);
+        }
 
-        const mouseWorldPos = this.inputManager.getMouseWorldPosition();
-        this.searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+        const mouseWorldPos = this.inputManager && typeof this.inputManager.getMouseWorldPosition === 'function' ? this.inputManager.getMouseWorldPosition() : this._scratchVector2.set(0, 0, 0);
+        if (this.searchLightSystem) {
+            this.searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+        }
         
         this.logicThrottleTimer += delta;
         if (this.logicThrottleTimer >= 0.05) {
             this.logicThrottleTimer = 0;
         }
-        this.navRadar.update();
+        if (this.navRadar) this.navRadar.update();
 
-        const playerPos = this.player.getPosition();
-        this.ocean.update(delta, playerPos);
+        const playerPos = this.player ? this.player.getPosition() : this._scratchVector3.set(0, 0, 0);
+        if (this.ocean) this.ocean.update(delta, playerPos);
 
-        const focusPoint = new THREE.Vector3(playerPos.x, playerPos.y * 0.5, playerPos.z);
-        const cameraOffset = new THREE.Vector3(50, 50, 50);
-        this.camera.position.copy(focusPoint).add(cameraOffset);
-        this.camera.lookAt(focusPoint);
+        if (this.camera) {
+            const focusPoint = this._scratchVector1.set(playerPos.x, playerPos.y * 0.5, playerPos.z);
+            const cameraOffset = this._scratchVector2.set(50, 50, 50);
+            this.camera.position.copy(focusPoint).add(cameraOffset);
+            this.camera.lookAt(focusPoint);
+        }
 
-        this.mainBase.update(delta, nightFactor, this.camera.quaternion, this.searchLightSystem, activeWeather);
-        this.windFarm.update(delta, this.camera.quaternion);
+        if (this.mainBase && this.camera && this.searchLightSystem) {
+            this.mainBase.update(delta, nightFactor, this.camera.quaternion, this.searchLightSystem, activeWeather);
+        }
+        if (this.windFarm && this.camera) {
+            this.windFarm.update(delta, this.camera.quaternion);
+        }
         
-        this.player.mesh.quaternion.copy(this.camera.quaternion);
-        this.renderer.render(this.scene, this.camera);
+        if (this.player && this.player.mesh && this.camera) {
+            this.player.mesh.quaternion.copy(this.camera.quaternion);
+        }
+        if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 }

@@ -3,11 +3,17 @@ import * as THREE from 'three';
 import { AudioManager } from './audioManager.js';
 import { crash } from './crash.js';
 
-export class HelicopterPlayer {
+export default class HelicopterPlayer {
     constructor(scene) {
         this.scene = scene;
         this.group = new THREE.Group();
         scene.add(this.group);
+
+        // Pre-allocated scratch vectors to prevent allocations in high-frequency update loops
+        this._scratchVector2D_1 = new THREE.Vector2();
+        this._scratchVector2D_2 = new THREE.Vector2();
+        this._scratchVector2D_3 = new THREE.Vector2();
+        this._scratchVector2D_moveDir = new THREE.Vector2();
 
         const textureLoader = new THREE.TextureLoader();
         this.totalFrames = 8;
@@ -293,7 +299,7 @@ export class HelicopterPlayer {
         const pad1X = 8.41, pad1Z = -6.54;
         const pad2X = -10.28, pad2Z = 3.74;
         const halfSize = 6.0; 
-        const pos2D = new THREE.Vector2(this.group.position.x, this.group.position.z);
+        const pos2D = this._scratchVector2D_1.set(this.group.position.x, this.group.position.z);
 
         const inPad1 = Math.abs(pos2D.x - pad1X) <= halfSize && Math.abs(pos2D.y - pad1Z) <= halfSize;
         const inPad2 = Math.abs(pos2D.x - pad2X) <= halfSize && Math.abs(pos2D.y - pad2Z) <= halfSize;
@@ -358,7 +364,7 @@ export class HelicopterPlayer {
         }
 
         this.targetPosition.copy(newPos);
-        const clickPos2D = new THREE.Vector2(newPos.x, newPos.z);
+        const clickPos2D = this._scratchVector2D_1.set(newPos.x, newPos.z);
         const isDestOverIsland = clickPos2D.length() < 50.0;
         const flightAlt = (this.winchState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 12.0;
         this.targetPosition.y = flightAlt;
@@ -369,12 +375,10 @@ export class HelicopterPlayer {
     toggleGear() {
         if (this.hasCrashed) return;
 
-        // Prevent operating landing gear while in winch mode (winch deployed, lowering, raising, or climbing back)
         if (this.winchState !== 'STOWED') {
             return;
         }
 
-        // Prevent retracting landing gear unless above cruise/island height threshold (35.0) and not on a landing pad
         const { isInside } = this.isInside3DBox(this.group.position);
         if (this.gearDown && (isInside || this.group.position.y < 35.0)) {
             return;
@@ -399,12 +403,11 @@ export class HelicopterPlayer {
     update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
 
-        // Ensure light is enabled when engine is running regardless of night factor, with boosted brightness at night
         this.searchLight.intensity = (this.engineState === 'RUNNING') ? Math.max(40.0, nightFactor * 150.0) : 0.0;
 
         const pos = this.group.position;
         const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
-        const pos2D = new THREE.Vector2(pos.x, pos.z);
+        const pos2D = this._scratchVector2D_1.set(pos.x, pos.z);
         const isOverOcean = pos2D.length() > 55.0;
 
         if (this.isTakingOff && this.engineState === 'RUNNING') {
@@ -520,8 +523,8 @@ export class HelicopterPlayer {
         currentPos.y += this.verticalVelocity * delta;
 
         if (this.engineState === 'SHUTTING_DOWN' && this.landingPadTarget) {
-            const padXZ = new THREE.Vector2(this.landingPadTarget.x, this.landingPadTarget.z);
-            const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
+            const padXZ = this._scratchVector2D_2.set(this.landingPadTarget.x, this.landingPadTarget.z);
+            const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const dist = currentXZ.distanceTo(padXZ);
 
             if (dist > 0.4) {
@@ -561,8 +564,8 @@ export class HelicopterPlayer {
         }
 
         if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
-            const targetXZ = new THREE.Vector2(this.targetPosition.x, this.targetPosition.z);
-            const currentXZ = new THREE.Vector2(currentPos.x, currentPos.z);
+            const targetXZ = this._scratchVector2D_2.set(this.targetPosition.x, this.targetPosition.z);
+            const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
 
             if (distance > 0.2) {
@@ -579,7 +582,7 @@ export class HelicopterPlayer {
                 const accelerationRate = 25.0; 
                 this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, delta * accelerationRate);
 
-                const moveDir = new THREE.Vector2().subVectors(targetXZ, currentXZ).normalize();
+                const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
                 const step = this.currentSpeed * delta;
                 
                 if (distance < step) {
@@ -613,12 +616,11 @@ export class HelicopterPlayer {
             this.currentSpeed = 0;
         }
 
-        // --- Calculate light target direction based on current frame / heading angle ---
         const headingAngle = (this.currentFrame / this.totalFrames) * (Math.PI * 2) + Math.PI;
         const forwardDist = 5.0;
         const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
         const targetZ = currentPos.z + Math.cos(headingAngle) * forwardDist;
-        const targetY = currentPos.y - 5.5; // 45-degree angle down towards the ground/water
+        const targetY = currentPos.y - 5.5;
         
         this.searchLightTarget.position.set(targetX, targetY, targetZ);
     }

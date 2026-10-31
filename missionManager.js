@@ -1,3 +1,4 @@
+// missionManager.js
 import * as THREE from 'three';
 
 export class MissionManager {
@@ -34,16 +35,20 @@ export class MissionManager {
     }
 
     registerPermanentLandmarks() {
-        this.navRadar.addOrUpdateMarker('main_base', new THREE.Vector3(0, 0, 0), '#3498db', 'BASE');
+        if (this.navRadar) {
+            this.navRadar.addOrUpdateMarker('main_base', new THREE.Vector3(0, 0, 0), '#3498db', 'BASE');
+        }
     }
 
     getWindFarmCenter() {
-        if (!this.windFarm || this.windFarm.turbines.length === 0) return new THREE.Vector3(380, 20, -320);
+        if (!this.windFarm || !this.windFarm.turbines || this.windFarm.turbines.length === 0) return new THREE.Vector3(380, 20, -320);
         const center = new THREE.Vector3();
         this.windFarm.turbines.forEach(turbine => {
-            const pos = new THREE.Vector3();
-            turbine.group.getWorldPosition(pos);
-            center.add(pos);
+            if (turbine && turbine.group) {
+                const pos = new THREE.Vector3();
+                turbine.group.getWorldPosition(pos);
+                center.add(pos);
+            }
         });
         center.divideScalar(this.windFarm.turbines.length);
         center.y += 20; 
@@ -51,23 +56,22 @@ export class MissionManager {
     }
 
     createWtgFireMission(missionData) {
-        if (!this.windFarm || this.windFarm.turbines.length === 0) return null;
+        if (!this.windFarm || !this.windFarm.turbines || this.windFarm.turbines.length === 0) return null;
 
         const turbineIndex = missionData && missionData.turbineIndex !== undefined ? missionData.turbineIndex : 0;
         const alreadyExtinguished = !!(missionData && (missionData.isExtinguished || missionData.isCompleted));
         const requiredWaterFraction = missionData && missionData.requiredWaterFraction !== undefined ? missionData.requiredWaterFraction : 1.0;
         
-        // Scale total required spray duration to match the randomized water fraction (e.g., max 2 seconds for a full tank)
         const maxExtinguishTime = Math.max(0.5, requiredWaterFraction * 1.0);
         
-        // Force-enable fire and sparks immediately
-        this.windFarm.setTurbineFire(turbineIndex, !alreadyExtinguished);
+        if (this.windFarm && typeof this.windFarm.setTurbineFire === 'function') {
+            this.windFarm.setTurbineFire(turbineIndex, !alreadyExtinguished);
+        }
         
-        const turbineWorldPos = this.windFarm.getTurbineWorldPosition(turbineIndex);
-        if (!alreadyExtinguished) {
+        const turbineWorldPos = this.windFarm && typeof this.windFarm.getTurbineWorldPosition === 'function' ? this.windFarm.getTurbineWorldPosition(turbineIndex) : new THREE.Vector3();
+        if (!alreadyExtinguished && this.navRadar) {
             this.navRadar.addOrUpdateMarker('wind_farm', turbineWorldPos, '#e74c3c', 'FIRE!');
         }
-        console.log(`🔥 Active Fire Mission Initialized: WTG Fire on turbine index ${turbineIndex} requiring ${(requiredWaterFraction * 100).toFixed(0)}% tank water at (${turbineWorldPos.x.toFixed(1)}, ${turbineWorldPos.z.toFixed(1)})`);
 
         let extinguishProgress = Math.max(0, Math.min(maxExtinguishTime, Number(missionData && missionData.progress) * maxExtinguishTime || 0));
         let serverProgress = missionData && missionData.progress !== undefined ? missionData.progress : 0;
@@ -89,23 +93,26 @@ export class MissionManager {
                 return serverProgress;
             },
             update: (delta, playerPosition) => {
-                if (finishedByServer) return false;
-                const isOnFire = this.windFarm.isTurbineOnFire(turbineIndex);
+                if (finishedByServer || !this.windFarm || !this.helicopterSystems) return false;
+                const isOnFire = typeof this.windFarm.isTurbineOnFire === 'function' ? this.windFarm.isTurbineOnFire(turbineIndex) : false;
                 if (!isOnFire || (missionData && missionData.isExtinguished)) {
                     return true;
                 }
 
-                const turbinePos = this.windFarm.getTurbineWorldPosition(turbineIndex);
-                const dist = playerPosition.distanceTo(turbinePos);
-                const isSprayingWater = this.helicopterSystems.isWaterActive();
+                const turbinePos = typeof this.windFarm.getTurbineWorldPosition === 'function' ? this.windFarm.getTurbineWorldPosition(turbineIndex) : new THREE.Vector3();
+                const dist = playerPosition ? playerPosition.distanceTo(turbinePos) : 999;
+                const isSprayingWater = typeof this.helicopterSystems.isWaterActive === 'function' ? this.helicopterSystems.isWaterActive() : false;
 
                 if (dist < 75.0 && isSprayingWater) {
                     extinguishProgress += delta;
-                    const percent = Math.min(100, Math.round((extinguishProgress / maxExtinguishTime) * 100));
 
                     if (extinguishProgress >= maxExtinguishTime) {
-                        this.windFarm.setTurbineFire(turbineIndex, false);
-                        this.navRadar.removeMarker('wind_farm');
+                        if (typeof this.windFarm.setTurbineFire === 'function') {
+                            this.windFarm.setTurbineFire(turbineIndex, false);
+                        }
+                        if (this.navRadar) {
+                            this.navRadar.removeMarker('wind_farm');
+                        }
                         if (this.socket && this.socket.connected) {
                             this.socket.emit('wtg-fire-extinguished', { missionId });
                         }
@@ -122,8 +129,12 @@ export class MissionManager {
                 return false;
             },
             cleanup: () => {
-                this.windFarm.setTurbineFire(turbineIndex, false);
-                this.navRadar.removeMarker('wind_farm');
+                if (this.windFarm && typeof this.windFarm.setTurbineFire === 'function') {
+                    this.windFarm.setTurbineFire(turbineIndex, false);
+                }
+                if (this.navRadar) {
+                    this.navRadar.removeMarker('wind_farm');
+                }
             }
         };
     }
@@ -135,10 +146,14 @@ export class MissionManager {
 
         if (this.windFarm && this.windFarm.turbines) {
             for (let i = 0; i < this.windFarm.turbines.length; i++) {
-                this.windFarm.setTurbineFire(i, false);
+                if (typeof this.windFarm.setTurbineFire === 'function') {
+                    this.windFarm.setTurbineFire(i, false);
+                }
             }
         }
-        this.navRadar.removeMarker('wind_farm');
+        if (this.navRadar) {
+            this.navRadar.removeMarker('wind_farm');
+        }
 
         this.currentMissionInstance = null;
         this.currentMissionKey = null;
@@ -148,7 +163,6 @@ export class MissionManager {
     spawnSpecificMission(type, missionData) {
         if (!missionData) return;
         
-        // Force all missions to WTG_FIRE since liferaft has been retired
         const missionType = 'WTG_FIRE';
 
         this.clearAllMissions();
@@ -165,7 +179,6 @@ export class MissionManager {
                 this.currentMissionInstance.serverExtinguishedBy = missionData.extinguishedBy || null;
             }
         }
-        console.log(`📡 Mission spawned: [${missionType}] ID: ${missionData.missionId}`);
     }
 
     applyMissionState(state) {
@@ -188,16 +201,20 @@ export class MissionManager {
             this.currentMissionInstance.serverIsCompleted = state.isCompleted || false;
             this.currentMissionInstance.serverExtinguishedBy = state.extinguishedBy || null;
 
-            if (state.turbineIndex !== undefined) {
+            if (state.turbineIndex !== undefined && this.windFarm && typeof this.windFarm.setTurbineFire === 'function') {
                 this.windFarm.setTurbineFire(state.turbineIndex, !state.isExtinguished && !state.isCompleted);
             }
 
             if (state.isExtinguished || state.isCompleted) {
-                if (state.turbineIndex !== undefined) {
+                if (state.turbineIndex !== undefined && this.windFarm && typeof this.windFarm.setTurbineFire === 'function') {
                     this.windFarm.setTurbineFire(state.turbineIndex, false);
                 }
-                this.navRadar.removeMarker('wind_farm');
-                this.currentMissionInstance.missionComplete();
+                if (this.navRadar) {
+                    this.navRadar.removeMarker('wind_farm');
+                }
+                if (typeof this.currentMissionInstance.missionComplete === 'function') {
+                    this.currentMissionInstance.missionComplete();
+                }
             }
         }
 
@@ -205,7 +222,7 @@ export class MissionManager {
     }
 
     update(delta, playerPosition, nightFactor) {
-        if (!this.windFarm || !this.helicopterSystems) return;
+        if (!this.windFarm || !this.helicopterSystems || !playerPosition) return;
 
         const pad1 = new THREE.Vector3(8.41, 19.81, -6.54);
         const pad2 = new THREE.Vector3(-10.28, 27.29, 3.74);
@@ -221,9 +238,9 @@ export class MissionManager {
             let duration = 3.0;
             let currentTime = 0.0;
 
-            if (player.audioManager) {
+            if (player.audioManager && typeof player.audioManager.getShutdownDuration === 'function') {
                 const audioDuration = player.audioManager.getShutdownDuration();
-                const audioCurrentTime = player.audioManager.getShutdownCurrentTime();
+                const audioCurrentTime = typeof player.audioManager.getShutdownCurrentTime === 'function' ? player.audioManager.getShutdownCurrentTime() : 0;
                 if (audioDuration && !isNaN(audioDuration) && audioDuration > 0) {
                     duration = audioDuration;
                 }
@@ -243,14 +260,13 @@ export class MissionManager {
             this.helicopterSystems.water = Math.min(this.helicopterSystems.maxWater, this.helicopterSystems.water + delta * waterRate);
         }
 
-        if (this.missionState === 'ACTIVE' && this.currentMissionInstance) {
+        if (this.missionState === 'ACTIVE' && this.currentMissionInstance && typeof this.currentMissionInstance.update === 'function') {
             let isComplete = false;
             isComplete = this.currentMissionInstance.update(delta, playerPosition, nightFactor);
 
             if (isComplete && this.missionState === 'ACTIVE') {
                 this.missionState = 'COMPLETED';
                 this.lastMissionKey = this.currentMissionKey;
-                console.log(`🎉 Mission [${this.currentMissionKey}] Completed locally. Notifying server...`);
                 if (this.socket && this.socket.connected) {
                     this.socket.emit('complete-mission', { missionId: this.currentMissionInstance && this.currentMissionInstance.missionId });
                 } else {
