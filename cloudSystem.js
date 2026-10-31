@@ -64,7 +64,9 @@ export class CloudSystem {
             opacity: this.params.opacity,
             depthWrite: false,
             blending: THREE.NormalBlending,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            // Transparent + DoubleSide is otherwise drawn in two passes, flagging needsUpdate twice per frame
+            forceSinglePass: true
         });
 
         const puffGeo = new THREE.PlaneGeometry(this.params.size, this.params.size * 0.5);

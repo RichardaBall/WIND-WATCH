@@ -39,6 +39,8 @@ export default class HelicopterPlayer {
             alphaTest: 0.5,
             depthWrite: true,
             side: THREE.DoubleSide,
+            // Transparent + DoubleSide is otherwise drawn in two passes, flagging needsUpdate twice per frame
+            forceSinglePass: true,
             emissive: 0xffffff,
             emissiveIntensity: 2.0
         });
@@ -56,7 +58,8 @@ export default class HelicopterPlayer {
             roughness: 0.5,
             transparent: true,
             opacity: 0.85,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            forceSinglePass: true
         });
 
         this.rotor1 = new THREE.Mesh(rotorGeo, rotorMat);

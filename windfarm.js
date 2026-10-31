@@ -50,7 +50,9 @@ export class WindFarm {
             alphaTest: 0.1,
             depthWrite: true,
             roughness: 0.4,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            // Transparent + DoubleSide is otherwise drawn in two passes, flagging needsUpdate twice per frame
+            forceSinglePass: true
         });
 
         this.markerGeometry = new THREE.SphereGeometry(1, 16, 16);

@@ -26,6 +26,18 @@ export class OceanWater {
         
         this.water.rotation.x = -Math.PI / 2;
         this.water.position.y = -2.0;
+        // Replace the mirror reflection pass with the sky colour. Water renders the whole scene a second time every
+        // frame for its reflection, and that nested render makes three.js re-evaluate every lit material's shader
+        // each frame (lots of garbage, so GC stutter). From this top-down camera the water only mirrors the sky,
+        // which is a single colour, so a 1x1 texture holding scene.background gives the same look.
+        // Sun glitter and wave normals are part of the water shader and still work.
+        this.scene = scene;
+        this.skyReflection = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+        this.water.material.uniforms['mirrorSampler'].value = this.skyReflection;
+        // Keep the one cheap part of Water's own onBeforeRender: the camera position used for fresnel and sun glitter
+        this.water.onBeforeRender = (renderer, renderScene, camera) => {
+            this.water.material.uniforms['eye'].value.setFromMatrixPosition(camera.matrixWorld);
+        };
         scene.add(this.water);
 
         // Subtle dark overlay plane just above the water for smooth night dimming
@@ -49,7 +61,24 @@ export class OceanWater {
         }
     }
 
+    updateSkyReflection() {
+        const sky = this.scene.background;
+        if (!sky || !sky.isColor) return;
+        // Linear values, as the original render target held them (it is not tone mapped or sRGB encoded)
+        const data = this.skyReflection.image.data;
+        const r = Math.round(sky.r * 255);
+        const g = Math.round(sky.g * 255);
+        const b = Math.round(sky.b * 255);
+        if (data[0] !== r || data[1] !== g || data[2] !== b) {
+            data[0] = r;
+            data[1] = g;
+            data[2] = b;
+            this.skyReflection.needsUpdate = true;
+        }
+    }
+
     update(delta, playerPosition) {
+        this.updateSkyReflection();
         if (this.water.material.uniforms['time']) {
             this.water.material.uniforms['time'].value += delta * 0.3;
         }
