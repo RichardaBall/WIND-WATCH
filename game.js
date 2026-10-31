@@ -107,18 +107,9 @@ export class Game {
 
             const remoteAudio = this.player.audioManager.createRemoteRotorSource();
 
-            const shadowGeo = new THREE.PlaneGeometry(10, 10);
-            const shadowMat = new THREE.MeshBasicMaterial({
-                color: 0x000000,
-                transparent: true,
-                opacity: 0.35,
-                depthWrite: false,
-                depthTest: false
-            });
-            const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
-            shadowMesh.rotation.x = -Math.PI / 2;
+            // Use the helicopter's own soft round shadow (same as the local player's), not a plain square
+            const shadowMesh = remoteHeli.shadowMesh;
             shadowMesh.position.set(data.x || 0, 0.2, data.z || 0);
-            this.scene.add(shadowMesh);
 
             const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
             searchLight.position.set(0, -0.5, 0);
