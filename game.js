@@ -269,21 +269,32 @@ export class Game {
                         this.player.audioManager.stopRemoteRotor(rp.remoteAudio);
                     }
 
-                    if (rp.group) this.scene.remove(rp.group);
-                    if (rp.shadowMesh) this.scene.remove(rp.shadowMesh);
-                    if (rp.winchSystem && rp.winchSystem.cableLine) {
-                        this.scene.remove(rp.winchSystem.cableLine);
-                        this.scene.remove(rp.winchSystem.hookMesh);
-                        this.scene.remove(rp.winchSystem.rotorWashSystem);
+                    // Remove and free everything spawnRemotePlayer created, so players joining and leaving do not pile up GPU memory
+                    const heli = rp.helicopter;
+                    this.disposeObject(rp.group);
+                    this.disposeObject(rp.shadowMesh);
+                    if (rp.winchSystem) {
+                        this.disposeObject(rp.winchSystem.cableLine);
+                        this.disposeObject(rp.winchSystem.hookMesh);
+                        this.disposeObject(rp.winchSystem.rotorWashSystem);
                     }
-                    if (rp.waterSystem && rp.waterSystem.particleSystem) {
-                        this.scene.remove(rp.waterSystem.particleSystem);
-                        this.scene.remove(rp.waterSystem.splashSystem);
+                    if (rp.waterSystem) {
+                        this.disposeObject(rp.waterSystem.particleSystem);
+                        this.disposeObject(rp.waterSystem.splashSystem);
                     }
-                    if (rp.searchLight) this.scene.remove(rp.searchLight);
-                    if (rp.searchLightTarget) this.scene.remove(rp.searchLightTarget);
-                    if (rp.lightPoolMesh) this.scene.remove(rp.lightPoolMesh);
-                    
+                    this.disposeObject(rp.searchLightTarget);
+                    this.disposeObject(rp.lightPoolMesh);
+                    if (heli) {
+                        // Added to the scene directly by HelicopterPlayer, not to its group
+                        this.disposeObject(heli.shadowMesh);
+                        this.disposeObject(heli.dropLine);
+                        this.disposeObject(heli.searchLightTarget);
+                        // Only one of the gear textures is on the material at a time
+                        for (const tex of [heli.gearUpTex, heli.gearDownTex, heli.emissiveTex]) {
+                            if (tex) tex.dispose();
+                        }
+                    }
+
                     if (this.navRadar) {
                         this.navRadar.removeMarker(`remote_${id}`);
                     }
@@ -304,6 +315,21 @@ export class Game {
         this.networkManager.on('mission-completed', () => {
             if (this.mainBase && typeof this.mainBase.resetFade === 'function') this.mainBase.resetFade();
             if (this.missionManager) this.missionManager.clearAllMissions();
+        });
+    }
+
+    disposeObject(object) {
+        if (!object) return;
+        if (object.parent) object.parent.remove(object);
+        object.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            const materials = Array.isArray(child.material) ? child.material : (child.material ? [child.material] : []);
+            for (const mat of materials) {
+                for (const key in mat) {
+                    if (mat[key] && mat[key].isTexture) mat[key].dispose();
+                }
+                mat.dispose();
+            }
         });
     }
 
