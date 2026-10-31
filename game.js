@@ -21,6 +21,7 @@ import { WinchSystem } from './winchSystem.js';
 import { NetworkManager } from './networkManager.js';
 import { FpsCounter } from './fpsCounter.js';
 import { BASE_HELIPADS } from './helipads.js';
+import { SupportShip } from './ship.js';
 
 export class Game {
     constructor() {
@@ -56,6 +57,11 @@ export class Game {
 
         this.player = new HelicopterPlayer(scene);
 
+        // Its helideck lands and refuels like the base helipads
+        this.ship = new SupportShip(scene);
+        this.player.ship = this.ship;
+        this.player.landingPads.push(this.ship.deckPosition);
+
         const defaultSpawnPos = BASE_HELIPADS[0];
 
         this.player.group.position.copy(defaultSpawnPos);
@@ -69,6 +75,7 @@ export class Game {
 
         this.searchLightSystem = new SearchLightSystem(scene, this.player.group);
         this.navRadar = new NavRadar(scene, this.player, camera);
+        this.navRadar.addOrUpdateMarker('ship', this.ship.group, '#f59e0b', 'SHIP');
 
         this.collisionManager = new CollisionManager(scene, this.player, this.windFarm, this.mainBase);
         this.missionManager = new MissionManager(scene, this.navRadar, this.windFarm, this.helicopterSystems, this.player, camera, this.searchLightSystem, null);
@@ -193,6 +200,7 @@ export class Game {
             }
 
             if (this.player && this.player.group) {
+                this.player.restingPad = null;
                 this.player.group.position.copy(chosenPad);
                 this.player.targetPosition.copy(chosenPad);
                 this.player.targetAltitude = chosenPad.y;
@@ -347,6 +355,9 @@ export class Game {
         if (this.cloudSystem && this.camera) {
             this.cloudSystem.update(delta, nightFactor, this.camera.quaternion, windForce, activeWeather);
         }
+
+        // Before the player, so a helicopter on the deck moves with this frame's ship position
+        if (this.ship) this.ship.update();
 
         if (this.player) {
             this.player.update(delta, nightFactor, windForce);

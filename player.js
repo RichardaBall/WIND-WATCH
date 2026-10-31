@@ -87,9 +87,11 @@ export default class HelicopterPlayer {
         this.winchState = 'STOWED'; 
         this.winchTimer = 0;
         this.landingPadTarget = null;
+        this.restingPad = null; // Pad the helicopter is parked on, from touchdown until take-off is done
+        this.ship = null;       // Set by game.js; its deck is one of the landingPads and moves
         this.isTakingOff = false;
 
-        this.searchLight = new THREE.SpotLight(0xffffee, 150.0, 300.0, Math.PI / 4, 0.5, 1.0);
+        this.searchLight =new THREE.SpotLight(0xffffee, 150.0, 300.0, Math.PI / 4, 0.5, 1.0);
         this.searchLight.position.set(0, -0.5, 0);
         
         this.searchLightTarget = new THREE.Object3D();
@@ -257,6 +259,7 @@ export default class HelicopterPlayer {
         this.verticalVelocity = 0;
         this.currentSpeed = 0;
         this.landingPadTarget = null;
+        this.restingPad = null;
         this.isTakingOff = false;
 
         if (this.helicopterSystems) {
@@ -373,6 +376,7 @@ export default class HelicopterPlayer {
         }, () => {
             if (this.engineState === 'SHUTTING_DOWN') {
                 this.engineState = 'OFF';
+                this.restingPad = this.landingPadTarget;
                 this.landingPadTarget = null;
                 this.isTakingOff = false;
             }
@@ -467,7 +471,8 @@ export default class HelicopterPlayer {
             this.isMoving = false;
             this.currentSpeed = 0;
             if (Math.abs(pos.y - 45.0) < 1.0) {
-                this.isTakingOff = false; 
+                this.isTakingOff = false;
+                this.restingPad = null;
             }
         }
 
@@ -490,7 +495,8 @@ export default class HelicopterPlayer {
             }
 
             const minSafeAlt = (this.winchState !== 'STOWED') ? 8.0 : 15.0;
-            if (!isInside && pos.y <= minSafeAlt && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
+            // Not while climbing out from a pad: the ship's deck is low enough that the climb passes through this band
+            if (!isInside && !this.restingPad && pos.y <= minSafeAlt && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
                 this.triggerCrash(false);
                 return;
             }
@@ -574,8 +580,18 @@ export default class HelicopterPlayer {
         this.verticalVelocity += (altitudeError * verticalAccel - this.verticalVelocity * verticalDamping) * delta;
         currentPos.y += this.verticalVelocity * delta;
 
+        // The ship's deck keeps moving: parked on it (through engine start and climb-out) the helicopter stays on
+        // its pad, and while coming in to land it moves along with the deck before closing the remaining gap
+        if (this.restingPad) {
+            currentPos.x = this.restingPad.x;
+            currentPos.z = this.restingPad.z;
+        } else if (this.engineState === 'SHUTTING_DOWN' && this.ship && this.landingPadTarget === this.ship.deckPosition) {
+            currentPos.x += this.ship.deckMovement.x;
+            currentPos.z += this.ship.deckMovement.z;
+        }
+
         if (this.engineState === 'SHUTTING_DOWN' && this.landingPadTarget) {
-            const padXZ = this._scratchVector2D_2.set(this.landingPadTarget.x, this.landingPadTarget.z);
+            const padXZ =this._scratchVector2D_2.set(this.landingPadTarget.x, this.landingPadTarget.z);
             const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const dist = currentXZ.distanceTo(padXZ);
 
