@@ -76,6 +76,10 @@ export default class HelicopterPlayer {
         this.rotorBlades = [this.rotor1, this.rotor2];
         this.rotorSpeed = 0;
         this.maxRotorSpeed = 90.0;
+        // The two-blade cross looks the same every 90 degrees. At 90 rad/s and 60 fps it turns ~86 degrees per
+        // frame, which the eye reads as a slow, twitching backwards crawl (wagon-wheel effect). Capping the
+        // visible turn per frame keeps it reading as a fast forward spin at any frame rate.
+        this.maxRotorStep = 0.35;
 
         this.gearDown = true;
         this.isWinchActive = false;
@@ -528,7 +532,7 @@ export default class HelicopterPlayer {
         }
 
         for (const blade of this.rotorBlades) {
-            blade.rotation.z += this.rotorSpeed * delta;
+            blade.rotation.z += Math.min(this.rotorSpeed * delta, this.maxRotorStep);
         }
 
         const currentPos = this.group.position;
@@ -598,7 +602,8 @@ export default class HelicopterPlayer {
                 }
 
                 const accelerationRate = 25.0; 
-                this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, delta * accelerationRate);
+                // Capped at 1 so a slow frame (below ~25 fps) cannot overshoot and make the speed oscillate
+                this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, Math.min(1, delta * accelerationRate));
 
                 const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
                 const step = this.currentSpeed * delta;
@@ -616,16 +621,24 @@ export default class HelicopterPlayer {
                 // Calculate angle clockwise from North where Index 2 = North (0 radians)
                 const angle = Math.atan2(moveDir.x, -moveDir.y);
                 const stepSize = (Math.PI * 2) / this.totalFrames;
-                const steps = Math.round(angle / stepSize);
-                const frameIndex = (2 + steps) % this.totalFrames;
-                this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
 
-                const frameOffset = this.currentFrame * (1 / this.totalFrames);
-                if (this.material.map) {
-                    this.material.map.offset.x = frameOffset;
-                }
-                if (this.material.emissiveMap) {
-                    this.material.emissiveMap.offset.x = frameOffset;
+                // Only change sprite frame once the heading is clearly past the edge of the current frame's sector
+                // (dead zone, so wind cannot flip it back and forth on the border), and not in the last 2 units
+                // before the target, where the direction to the target swings around
+                const frameAngle = (this.currentFrame - 2) * stepSize;
+                const angleDiff = Math.atan2(Math.sin(angle - frameAngle), Math.cos(angle - frameAngle));
+                if (distance > 2.0 && Math.abs(angleDiff) > stepSize * 0.65) {
+                    const steps = Math.round(angle / stepSize);
+                    const frameIndex = (2 + steps) % this.totalFrames;
+                    this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
+
+                    const frameOffset = this.currentFrame * (1 / this.totalFrames);
+                    if (this.material.map) {
+                        this.material.map.offset.x = frameOffset;
+                    }
+                    if (this.material.emissiveMap) {
+                        this.material.emissiveMap.offset.x = frameOffset;
+                    }
                 }
             } else {
                 this.isMoving = false;

@@ -443,7 +443,7 @@ export class Game {
 
             if (rp.rotorSpeed > 0 && rp.helicopter && rp.helicopter.rotorBlades) {
                 for (const blade of rp.helicopter.rotorBlades) {
-                    if (blade) blade.rotation.z += rp.rotorSpeed * delta;
+                    if (blade) blade.rotation.z += Math.min(rp.rotorSpeed * delta, rp.helicopter.maxRotorStep);
                 }
             }
 
@@ -471,7 +471,7 @@ export class Game {
                     rp.lightPoolMesh.material.opacity = nightFactor * 0.9;
                     
                     if (rp.searchLightTarget && rp.targetSearchLightPos) {
-                        rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, delta * 15.0);
+                        rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, Math.min(1, delta * 15.0));
                         rp.lightPoolMesh.position.set(
                             rp.searchLightTarget.position.x, 
                             0.05, 
