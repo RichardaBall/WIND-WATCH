@@ -19,6 +19,7 @@ import { CloudSystem } from './cloudSystem.js';
 import { WaterSystem } from './waterSystem.js';
 import { WinchSystem } from './winchSystem.js';
 import { NetworkManager } from './networkManager.js';
+import { FpsCounter } from './fpsCounter.js';
 
 export class Game {
     constructor() {
@@ -71,6 +72,7 @@ export class Game {
         this.collisionManager = new CollisionManager(scene, this.player, this.windFarm, this.mainBase);
         this.missionManager = new MissionManager(scene, this.navRadar, this.windFarm, this.helicopterSystems, this.player, camera, this.searchLightSystem, null);
         this.hudManager = new HudManager(this.player, this.helicopterSystems, this.searchLightSystem);
+        this.fpsCounter = new FpsCounter(renderer);
 
         this.settings = setupSettings(this.dayNightCycle, this.player, this.weatherSystem, this.missionManager, this.helicopterSystems, this.cloudSystem);
         this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, this.searchLightSystem, this.dayNightCycle);
@@ -526,5 +528,6 @@ export class Game {
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
+        if (this.fpsCounter) this.fpsCounter.update();
     }
 }
