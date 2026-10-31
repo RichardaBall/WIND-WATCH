@@ -1,3 +1,4 @@
+// waterSystem.js
 import * as THREE from 'three';
 
 export class WaterSystem {
@@ -10,7 +11,6 @@ export class WaterSystem {
         this.particlesCount = 4000;
         this.splashCount = 1500;
 
-        // --- Tuned Parameters ---
         this.params = {
             particleSize: 9.0,
             particleOpacity: 0.35,
@@ -25,7 +25,9 @@ export class WaterSystem {
         this.parentGroup.getWorldPosition(this.lastHeliWorldPos);
         this.heliVelocity = new THREE.Vector3();
 
-        // --- Falling Shower Stream Setup ---
+        // Pre-allocated scratch vector for calculations
+        this._scratchSpawnCenter = new THREE.Vector3();
+
         this.particleGeometry = new THREE.BufferGeometry();
         this.positions = new Float32Array(this.particlesCount * 3);
         this.velocities = new Float32Array(this.particlesCount * 3);
@@ -43,7 +45,6 @@ export class WaterSystem {
         this.particleGeometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
         this.particleGeometry.setAttribute('size', new THREE.BufferAttribute(this.sizes, 1));
 
-        // Soft feathered radial texture
         const canvas = document.createElement('canvas');
         canvas.width = 64;
         canvas.height = 64;
@@ -74,7 +75,6 @@ export class WaterSystem {
         this.particleSystem.renderOrder = 999;
         this.scene.add(this.particleSystem);
 
-        // --- Surface Impact Splash Setup ---
         this.splashGeometry = new THREE.BufferGeometry();
         this.splashPositions = new Float32Array(this.splashCount * 3);
         this.splashVelocities = new Float32Array(this.splashCount * 3);
@@ -136,7 +136,6 @@ export class WaterSystem {
 
     start() {
         if (this.playerRef && this.playerRef.gearDown) {
-            console.log("Cannot spray water while landing gear is down!");
             this.isActive = false;
             return;
         }
@@ -169,7 +168,7 @@ export class WaterSystem {
             }
         }
 
-        const currentHeliWorldPos = new THREE.Vector3();
+        const currentHeliWorldPos = this._scratchSpawnCenter;
         this.parentGroup.getWorldPosition(currentHeliWorldPos);
         if (delta > 0) {
             this.heliVelocity.copy(currentHeliWorldPos).sub(this.lastHeliWorldPos).divideScalar(delta);
@@ -180,7 +179,6 @@ export class WaterSystem {
         const splashPos = this.splashGeometry.attributes.position.array;
         const waterLevel = 0.0;
 
-        // --- Pooled Update for Falling Shower Particles ---
         for (let i = 0; i < this.particlesCount; i++) {
             const idx = i * 3;
 
@@ -204,7 +202,6 @@ export class WaterSystem {
             }
         }
 
-        // --- Pooled Update for Surface Splash Particles ---
         for (let i = 0; i < this.splashCount; i++) {
             const idx = i * 3;
             if (this.splashLifetimes[i] > 0) {
@@ -224,10 +221,8 @@ export class WaterSystem {
             }
         }
 
-        // --- Instantaneous Recycling Pool Spawning ---
         if (this.isActive) {
             const spawnBatch = Math.floor(this.params.spawnRate);
-            const spawnCenter = currentHeliWorldPos.clone().add(new THREE.Vector3(0, -1.8, 0));
 
             for (let b = 0; b < spawnBatch; b++) {
                 const i = this.spawnIndex;
@@ -236,9 +231,9 @@ export class WaterSystem {
                 const angle = Math.random() * Math.PI * 2;
                 const radius = 0.2 + Math.random() * 2.5;
 
-                positions[idx] = spawnCenter.x + Math.cos(angle) * radius;
-                positions[idx + 1] = spawnCenter.y;
-                positions[idx + 2] = spawnCenter.z + Math.sin(angle) * radius;
+                positions[idx] = currentHeliWorldPos.x + Math.cos(angle) * radius;
+                positions[idx + 1] = currentHeliWorldPos.y - 1.8;
+                positions[idx + 2] = currentHeliWorldPos.z + Math.sin(angle) * radius;
 
                 const scatter = this.params.spread;
                 const trailX = -this.heliVelocity.x * 0.3;

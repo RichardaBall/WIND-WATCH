@@ -1,3 +1,4 @@
+// windfarm.js
 import * as THREE from 'three';
 
 export class WindFarm {
@@ -350,8 +351,8 @@ export class WindFarm {
                 distSq = dx * dx + dz * dz;
             }
 
-            // --- Distance-Based LOD Scaling Checks ---
-            const isVisibleDist = !camPos || distSq < 500 * 500; // Disable heavy particles beyond 500 units
+            // Distance-based LOD cutoff: skip updating particle systems beyond 400 units
+            const isVisibleDist = !camPos || distSq < 400 * 400;
 
             if (!turbine.isSparking) {
                 turbine.rotor.rotation.z += this.config.speed * delta;

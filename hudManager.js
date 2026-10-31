@@ -1,3 +1,4 @@
+// hudManager.js
 import * as THREE from 'three';
 
 export class HudManager {
@@ -31,14 +32,13 @@ export class HudManager {
             <div style="display: flex; flex-direction: column; align-items: center; padding: 4px;">
                 <div style="font-size: 9px; color: rgba(255, 255, 255, 0.7); margin-bottom: 4px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">FUEL</div>
                 <div style="width: 6px; height: 50px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 0 6px rgba(0,0,0,0.5);">
-                    <div id="fuel-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #3b82f6, #60a5fa); border-radius: 3px; transition: height 0.2s;"></div>
+                    <div id="fuel-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #3b82f6, #60a5fa); border-radius: 3px;"></div>
                 </div>
             </div>
 
-            <!-- CENTRAL HUD ICONS (Engine, Gear, Light, Tool Mode) -->
+            <!-- CENTRAL HUD ICONS -->
             <div style="display: flex; gap: 14px; align-items: center; pointer-events: auto;">
-                <!-- ENGINE BUTTON (Mechanical Engine Block Icon) -->
-                <button id="hud-engine-btn" title="Toggle Engine (E)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
+                <button id="hud-engine-btn" title="Toggle Engine (E)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.9; color: #ffffff;">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M14 10V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v4"></path>
                         <path d="M4 10h16v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8z"></path>
@@ -49,8 +49,7 @@ export class HudManager {
                     </svg>
                 </button>
 
-                <!-- LANDING GEAR BUTTON (3 circles in a triangle arrangement) -->
-                <button id="hud-gear-btn" title="Toggle Landing Gear (G)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #22c55e;">
+                <button id="hud-gear-btn" title="Toggle Landing Gear (G)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.9; color: #22c55e;">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="5" r="3.5"></circle>
                         <circle cx="5" cy="19" r="3.5"></circle>
@@ -58,24 +57,15 @@ export class HudManager {
                     </svg>
                 </button>
 
-                <!-- LIGHT INDICATOR BUTTON (Hidden by default, can be re-enabled) -->
-                <button id="hud-light-btn" title="Toggle Searchlight (L)" style="display: none; background: transparent; border: none; cursor: pointer; padding: 4px; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
+                <button id="hud-light-btn" title="Toggle Searchlight (L)" style="display: none; background: transparent; border: none; cursor: pointer; padding: 4px; align-items: center; justify-content: center; opacity: 0.9; color: #ffffff;">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="5"></circle>
                         <line x1="12" y1="1" x2="12" y2="3"></line>
                         <line x1="12" y1="21" x2="12" y2="23"></line>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                        <line x1="1" y1="12" x2="3" y2="12"></line>
-                        <line x1="21" y1="12" x2="23" y2="12"></line>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                     </svg>
                 </button>
 
-                <!-- TOOL MODE BUTTON (Dynamic: Water Drop for 1, Water Fill for 2) -->
-                <button id="hud-tool-btn" title="Toggle Tool Mode (1 or 2)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; transition: transform 0.2s, color 0.2s; opacity: 0.9; color: #ffffff;">
-                    <!-- Default Water Drop SVG -->
+                <button id="hud-tool-btn" title="Toggle Tool Mode (1 or 2)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.9; color: #ffffff;">
                     <svg id="hud-tool-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
                     </svg>
@@ -86,13 +76,12 @@ export class HudManager {
             <div style="display: flex; flex-direction: column; align-items: center; padding: 4px;">
                 <div style="font-size: 9px; color: rgba(255, 255, 255, 0.7); margin-bottom: 4px; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.8);">WATER</div>
                 <div style="width: 6px; height: 50px; background: rgba(255, 255, 255, 0.15); border-radius: 3px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; box-shadow: 0 0 6px rgba(0,0,0,0.5);">
-                    <div id="water-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8); border-radius: 3px; transition: height 0.2s;"></div>
+                    <div id="water-bar-fill" style="width: 100%; height: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8); border-radius: 3px;"></div>
                 </div>
             </div>
         `;
         document.body.appendChild(hudContainer);
 
-        // Bind click event listeners
         document.getElementById('hud-engine-btn').addEventListener('click', () => {
             if (this.player && typeof this.player.handleEngineKey === 'function') {
                 this.player.handleEngineKey();
@@ -115,11 +104,7 @@ export class HudManager {
             if (this.helicopterSystems) {
                 const isWaterFull = this.helicopterSystems.water >= this.helicopterSystems.maxWater;
                 if (this.helicopterSystems.activeToolKey === 'WATER') {
-                    if (isWaterFull) {
-                        console.log("Water tank is full! Cannot select water fill tool.");
-                        return;
-                    }
-                    this.helicopterSystems.setTool('WINCH');
+                    if (!isWaterFull) this.helicopterSystems.setTool('WINCH');
                 } else {
                     this.helicopterSystems.setTool('WATER');
                 }
@@ -127,7 +112,6 @@ export class HudManager {
         });
     }
 
-    // Helper methods to dynamically show or hide the searchlight icon later
     showSearchlightIcon() {
         const lightBtn = document.getElementById('hud-light-btn');
         if (lightBtn) lightBtn.style.display = 'flex';
@@ -140,12 +124,11 @@ export class HudManager {
 
     update() {
         const now = performance.now();
-        if (now - this._lastHudUpdate < 100) return;
+        if (now - this._lastHudUpdate < 100) return; // Throttled to 100ms to eliminate DOM layout lag
         this._lastHudUpdate = now;
 
         if (!this.helicopterSystems) return;
 
-        // 1. Update Resource Bars
         const fuelPercent = Math.max(0, Math.min(100, Math.round(this.helicopterSystems.fuel)));
         const waterPercent = Math.max(0, Math.min(100, Math.round(this.helicopterSystems.water)));
 
@@ -161,55 +144,33 @@ export class HudManager {
             waterFill.style.height = `${waterPercent}%`;
         }
 
-        // 2. Update Engine Icon State Colours
         const engineBtn = document.getElementById('hud-engine-btn');
         if (engineBtn && this.player) {
             const state = this.player.engineState;
             if (state === 'STARTING') {
-                const flash = Math.floor(Date.now() / 300) % 2 === 0;
-                engineBtn.style.color = flash ? '#eab308' : 'rgba(255, 255, 255, 0.3)';
+                engineBtn.style.color = '#eab308';
             } else if (state === 'RUNNING') {
                 engineBtn.style.color = '#22c55e';
-            } else if (state === 'SHUTTING_DOWN') {
-                const flash = Math.floor(Date.now() / 300) % 2 === 0;
-                engineBtn.style.color = flash ? '#ef4444' : 'rgba(255, 255, 255, 0.3)';
-            } else if (state === 'CRASHED') {
+            } else if (state === 'SHUTTING_DOWN' || state === 'CRASHED') {
                 engineBtn.style.color = '#ef4444';
             } else {
                 engineBtn.style.color = '#ffffff';
             }
         }
 
-        // 3. Update Landing Gear Icon
         const gearBtn = document.getElementById('hud-gear-btn');
         if (gearBtn && this.player) {
             gearBtn.style.color = this.player.gearDown ? '#22c55e' : '#ffffff';
         }
 
-        // 4. Update Searchlight Icon
-        const lightBtn = document.getElementById('hud-light-btn');
-        if (lightBtn && this.searchLightSystem) {
-            if (this.searchLightSystem.state === 'OFF') {
-                lightBtn.style.color = '#ffffff';
-            } else if (this.searchLightSystem.state === 'LOCKED') {
-                lightBtn.style.color = '#ef4444';
-            } else {
-                lightBtn.style.color = '#22c55e';
-            }
-        }
-
-        // 5. Update Tool Button Icon and Color based on Active Tool (WATER vs WINCH)
         const toolBtn = document.getElementById('hud-tool-btn');
         const toolIconSvg = document.getElementById('hud-tool-icon');
         if (toolBtn && toolIconSvg && this.helicopterSystems) {
             const activeTool = this.helicopterSystems.activeToolKey;
             if (activeTool === 'WATER') {
-                // Water Drop Symbol (Pressing 1)
                 toolBtn.style.color = '#38bdf8';
                 toolIconSvg.innerHTML = `<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>`;
-                toolBtn.title = "Water Drop Tool (1 & Space)";
             } else {
-                // Water Fill Symbol - Bucket with upward-facing arrow (Pressing 2)
                 toolBtn.style.color = '#0ea5e9';
                 toolIconSvg.innerHTML = `
                     <path d="M3 6h18v2H3z"></path>
@@ -217,7 +178,6 @@ export class HudManager {
                     <path d="M12 17v-6"></path>
                     <path d="M9 14l3-3 3 3"></path>
                 `;
-                toolBtn.title = "Water Fill System (2 & Space)";
             }
         }
     }
