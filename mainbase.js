@@ -51,6 +51,7 @@ export class MainBase {
 
         const baseGeometry = new THREE.PlaneGeometry(72, 72);
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
+        this.mesh.renderOrder = 0;
         this.group.add(this.mesh);
 
         // --- 3D Landing Area Safe Zone Boxes (Invisible Collision/Landing Volumes) ---
@@ -226,7 +227,6 @@ export class MainBase {
             if (callback) callback(texture, imgData, img.width, img.height);
         };
         img.onerror = () => {
-            // Fallback if image fails or cross-origin blocks canvas read
             const texture = new THREE.TextureLoader().load(url);
             if (callback) callback(texture, null, 512, 512);
         };
@@ -240,7 +240,6 @@ export class MainBase {
             pixelData = this.rainPixelData;
         }
 
-        // If pixel data isn't loaded yet or couldn't be read due to security sandbox, fallback to a radial distance check for the island solid body
         if (!pixelData) {
             const dx = worldPos.x;
             const dz = worldPos.z;
@@ -250,12 +249,11 @@ export class MainBase {
         const localPos = worldPos.clone();
         this.group.worldToLocal(localPos);
 
-        const halfSize = 36.0; // PlaneGeometry is 72x72, so half-size is 36
+        const halfSize = 36.0;
         if (localPos.x < -halfSize || localPos.x > halfSize || localPos.z < -halfSize || localPos.z > halfSize) {
             return false;
         }
 
-        // Map local X/Z coordinates to UV space (0 to 1)
         const u = (localPos.x + halfSize) / (halfSize * 2);
         const v = 1.0 - (localPos.z + halfSize) / (halfSize * 2);
 
@@ -269,7 +267,7 @@ export class MainBase {
         const index = (py * this.texWidth + px) * 4 + 3;
         const alpha = pixelData.data[index];
 
-        return alpha > 40; // True if pixel is opaque
+        return alpha > 40;
     }
 
     buildLightGroup(category, colorHex) {
@@ -277,8 +275,13 @@ export class MainBase {
         this.lightConfigs[category].forEach((pos, idx) => {
             const zVal = pos.z !== undefined ? pos.z : 0.2;
             const markerGeo = new THREE.SphereGeometry(1, 16, 16);
-            const markerMat = new THREE.MeshBasicMaterial({ color: colorHex, depthTest: true });
+            const markerMat = new THREE.MeshBasicMaterial({ 
+                color: colorHex, 
+                depthTest: true, 
+                depthWrite: true 
+            });
             const marker = new THREE.Mesh(markerGeo, markerMat);
+            marker.renderOrder = 1;
             marker.position.set(pos.x, pos.y, zVal);
             marker.scale.set(pos.scale, pos.scale, pos.scale);
             this.group.add(marker);
