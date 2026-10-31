@@ -143,6 +143,7 @@ export default class HelicopterPlayer {
         ];
         this.landingZoneHalfSize = 6.0; // Same zone shutdownEngine() checks
         this.landingAidRange = 20.0;
+        this.landingRingHideHeight = 10.0; // Ring disappears when closer than this above the pad
         if (!this.isRemote) {
             const ringGeo = new THREE.RingGeometry(1.2, 1.8, 32);
             ringGeo.rotateX(-Math.PI / 2);
@@ -622,7 +623,8 @@ export default class HelicopterPlayer {
                 if (this.landingMarker) {
                     this.landingMarker.position.set(currentPos.x, nearPad.y + 0.05, currentPos.z);
                     this.landingMarker.material.color.setHex(aidColor);
-                    this.landingMarker.visible = true;
+                    // Hide the ring in the last stretch above the pad (final descent, or just lifted off)
+                    this.landingMarker.visible = currentPos.y - nearPad.y > this.landingRingHideHeight;
                 }
             } else {
                 lineMat.color.setHex(0xffffff);
