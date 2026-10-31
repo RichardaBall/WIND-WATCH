@@ -1,6 +1,7 @@
 // ship.js
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Research ship sailing a circle around the island, between the inner (150) and outer (300) turbine rings.
 // Its place comes from the clock, like the weather, so every player sees it in the same spot with no network traffic.
@@ -14,9 +15,11 @@ export class SupportShip {
         this.length = 44.0;
         this.beam = 11.0;
         this.hullTop = 5.0;        // main deck amidships; sea surface is at -2 (ocean.js)
+        this.lowDeckTop = 1.5;     // low working deck aft, close to the water
+        this.stepX = -4.5;         // where the main deck steps down to the low deck
         this.keel = -3.5;
         this.deckHeight = 7.0;     // helideck surface, where a landed helicopter sits
-        this.deckOffset = -16.0;   // helideck centre, from the middle of the ship towards the stern
+        this.deckOffset = -19.0;   // helideck centre, from the middle of the ship; the pad overhangs the stern
 
         this.group = new THREE.Group();
         scene.add(this.group);
@@ -42,7 +45,7 @@ export class SupportShip {
         const halfBeam = this.beam / 2 * (0.85 + 0.15 * stern) * Math.sqrt(Math.max(0, 1 - Math.pow(bow, 2.2)));
         return {
             halfBeam: Math.max(0.15, halfBeam),
-            top: this.hullTop + 1.6 * bow * bow,
+            top: x < this.stepX ? this.lowDeckTop : this.hullTop + 1.6 * bow * bow,
             keel: this.keel + 6.0 * Math.pow(bow, 3)
         };
     }
@@ -74,8 +77,13 @@ export class SupportShip {
     buildHull(hullMat, deckMat, whiteMat) {
         const sectionCount = 36;
         const sections = [];
+        const xs = [this.stepX - 0.02, this.stepX + 0.02];  // two close sections make the deck step a sharp edge
         for (let i = 0; i <= sectionCount; i++) {
-            sections.push(this.sectionPoints(-this.length / 2 + this.length * i / sectionCount));
+            xs.push(-this.length / 2 + this.length * i / sectionCount);
+        }
+        xs.sort((a, b) => a - b);
+        for (const x of xs) {
+            sections.push(this.sectionPoints(x));
         }
         const ring = sections[0].length;
         const last = sections.length - 1;
@@ -156,86 +164,101 @@ export class SupportShip {
         const deck = this.hullTop;
 
         // Deckhouse, and the bridge on top of it with a window band all round
-        const house = new THREE.Mesh(new RoundedBoxGeometry(15, 3.2, 8.4, 2, 0.5), whiteMat);
-        house.position.set(-1, deck + 1.6, 0);
+        const house = new THREE.Mesh(new RoundedBoxGeometry(15, 3.2, 8.4, 2, 0.1), whiteMat);
+        house.position.set(4, deck + 1.6, 0);
         this.group.add(house);
 
-        const bridge = new THREE.Mesh(new RoundedBoxGeometry(7.5, 2.8, 9.4, 2, 0.45), whiteMat);
-        bridge.position.set(3, deck + 4.6, 0);
+        const bridge = new THREE.Mesh(new RoundedBoxGeometry(7.5, 2.8, 9.4, 2, 0.1), whiteMat);
+        // Front flush with the deckhouse front (deckhouse ends at 11.5, bridge is 7.5 long)
+        bridge.position.set(7.75, deck + 4.6, 0);
         this.group.add(bridge);
 
-        const windows = new THREE.Mesh(new RoundedBoxGeometry(7.6, 0.9, 9.5, 2, 0.44), windowMat);
-        windows.position.set(3, deck + 5.1, 0);
+        const windows = new THREE.Mesh(new RoundedBoxGeometry(7.6, 0.9, 9.5, 2, 0.1), windowMat);
+        windows.position.set(7.75, deck + 5.1, 0);
         this.group.add(windows);
 
-        // Mast with a radar bar and a white dome
-        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 5, 8), whiteMat);
-        mast.position.set(3.5, deck + 8.5, 0);
-        this.group.add(mast);
-
-        const radar = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 3.2), deckMat);
-        radar.position.set(3.5, deck + 9.6, 0);
-        this.group.add(radar);
-
-        const dome = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 12), whiteMat);
-        dome.position.set(2.6, deck + 7.0, -2.8);
-        this.group.add(dome);
+        // Big radar dome on the bridge roof
+        const radome = this.createRadome(5.2);
+        radome.position.set(8.25, deck + 6.0, 0);
+        this.group.add(radome);
 
         // Funnel behind the bridge, blue top band
-        const funnel = new THREE.Mesh(new RoundedBoxGeometry(2.4, 2.6, 3.0, 2, 0.6), whiteMat);
-        funnel.position.set(-5.5, deck + 4.5, 0);
+        const funnel = new THREE.Mesh(new RoundedBoxGeometry(2.4, 2.6, 3.0, 2, 0.1), whiteMat);
+        funnel.position.set(-0.5, deck + 4.5, 0);
         this.group.add(funnel);
 
-        const funnelTop = new THREE.Mesh(new RoundedBoxGeometry(2.45, 0.7, 3.05, 2, 0.3), hullMat);
-        funnelTop.position.set(-5.5, deck + 5.5, 0);
+        const funnelTop = new THREE.Mesh(new RoundedBoxGeometry(2.45, 0.7, 3.05, 2, 0.1), hullMat);
+        funnelTop.position.set(-0.5, deck + 5.5, 0);
         this.group.add(funnelTop);
 
         // Orange lifeboats on both sides of the deckhouse
         for (const side of [-1, 1]) {
             const boat = new THREE.Mesh(new THREE.CapsuleGeometry(0.65, 2.6, 4, 10), orangeMat);
             boat.rotation.z = Math.PI / 2;
-            boat.position.set(-3, deck + 3.6, side * 4.6);
+            boat.position.set(2, deck + 3.6, side * 4.6);
             this.group.add(boat);
         }
 
         // Crane on the foredeck
         const craneBase = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 2.2, 12), orangeMat);
-        craneBase.position.set(12, deck + 1.1, 0);
+        // Foredeck rises towards the bow, so the crane stands on the deck height there
+        const foredeck = this.hullSection(16).top;
+        craneBase.position.set(16, foredeck + 1.1, 0);
         this.group.add(craneBase);
 
         const boom = new THREE.Mesh(new THREE.BoxGeometry(7, 0.5, 0.5), orangeMat);
         boom.geometry.translate(3.5, 0, 0);
-        boom.position.set(12, deck + 2.2, 0);
+        boom.position.set(16, foredeck + 2.2, 0);
         boom.rotation.set(0, -0.6, 0.45);
         this.group.add(boom);
 
-        // Helideck at the stern: same 13 x 13 pad as before, raised on posts and overhanging the narrower hull
-        const padSize = 13.0;
-        const platform = new THREE.Mesh(new THREE.BoxGeometry(padSize, 0.5, padSize), deckMat);
+        // Helideck at the stern, on posts above the low deck, overhanging the narrower hull
+        // Hexagonal pad, flat sides towards bow and stern, about the same landing area as the old 13 x 13 square
+        const padRadius = 7.2;
+        const platform = new THREE.Mesh(new THREE.CylinderGeometry(padRadius, padRadius, 0.5, 6), deckMat);
         platform.position.set(this.deckOffset, this.deckHeight - 0.25, 0);
         this.group.add(platform);
+        this.buildHelideckNet(padRadius, whiteMat);
 
-        for (const px of [-20, -12]) {
-            for (const pz of [-3.5, 3.5]) {
-                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, this.deckHeight - deck, 6), whiteMat);
-                post.position.set(px, (this.deckHeight + deck) / 2, pz);
+        // Posts stand on the low deck (the stern is at -22); diagonal braces from the transom carry the overhang
+        const stern = -this.length / 2;
+        for (const pz of [-3.5, 3.5]) {
+            for (const px of [stern + 1, this.deckOffset + 4]) {
+                const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, this.deckHeight - this.lowDeckTop, 6), whiteMat);
+                post.position.set(px, (this.deckHeight + this.lowDeckTop) / 2, pz);
                 this.group.add(post);
             }
+            this.group.add(this.createRod(
+                new THREE.Vector3(stern - 0.1, this.lowDeckTop - 2.0, pz),
+                new THREE.Vector3(this.deckOffset - 5, this.deckHeight - 0.5, pz),
+                0.25, whiteMat));
         }
 
-        const markGeo = new THREE.PlaneGeometry(padSize, padSize);
+        const markGeo = new THREE.CircleGeometry(padRadius, 6, Math.PI / 2);
         markGeo.rotateX(-Math.PI / 2);
-        // Markings glow faintly (deck floodlights) so a night landing has something to aim at
-        const deckTexture = this.createHelideckTexture();
-        const marking = new THREE.Mesh(markGeo, new THREE.MeshStandardMaterial({
-            map: deckTexture,
-            emissive: 0xffffff,
-            emissiveMap: deckTexture,
-            emissiveIntensity: 0.35,
+        // At night the deck is lit like the island's helipads: green lamps round the edge, their light pools
+        // baked into a light map (see mainbase.js buildNightLightMap) that update() fades in with nightfall
+        const lampRadius = padRadius - 0.5;
+        this.deckMaterial = new THREE.MeshStandardMaterial({
+            map: this.createHelideckTexture(),
+            lightMap: this.buildDeckLightMap(lampRadius / padRadius),
+            lightMapIntensity: 0.0,
             roughness: 0.8
-        }));
+        });
+        const marking = new THREE.Mesh(markGeo, this.deckMaterial);
         marking.position.set(this.deckOffset, this.deckHeight + 0.02, 0);
         this.group.add(marking);
+
+        // The six lamps themselves, one in each corner, as small unlit dots like the island's
+        const lampMat = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
+        const lampGeo = new THREE.SphereGeometry(0.2, 8, 6);
+        for (let k = 0; k < 6; k++) {
+            const a = Math.PI / 2 + k * Math.PI / 3;
+            const lamp = new THREE.Mesh(lampGeo, lampMat);
+            // Same corner as the light map's lamp k (circle x -> ship x, circle y -> ship -z after rotateX)
+            lamp.position.set(this.deckOffset + lampRadius * Math.cos(a), this.deckHeight + 0.15, -lampRadius * Math.sin(a));
+            this.group.add(lamp);
+        }
 
         // Navigation lights as small unlit dots (no real lights: they cost every lit material per pixel)
         const navLight = (color, x, y, z) => {
@@ -243,9 +266,210 @@ export class SupportShip {
             dot.position.set(x, y, z);
             this.group.add(dot);
         };
-        navLight(0xff2222, 3, deck + 5.8, -4.9);  // port (left), red
-        navLight(0x22ff44, 3, deck + 5.8, 4.9);   // starboard (right), green
-        navLight(0xffffff, 3.5, deck + 11.1, 0);  // masthead, white
+        navLight(0xff2222, 7.75, deck + 5.8, -4.9);  // port (left), red
+        navLight(0x22ff44, 7.75, deck + 5.8, 4.9);   // starboard (right), green
+        navLight(0xffffff, 8.25, deck + 6.0 + radome.userData.topHeight + 0.2, 0);  // masthead, white, on top of the dome
+    }
+
+    // Radar dome built from panels like a real one: hexagons with a few pentagons (the panel layout is the dual of a
+    // subdivided icosahedron). Each panel is lit as one flat piece and slightly shrunk, so a grey under-layer shows as
+    // seams between them (lit, so the seams darken at night like the rest of the ship). Origin at the base
+    createRadome(radius) {
+        const group = new THREE.Group();
+        const panelMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.55 });
+        const greyMat = new THREE.MeshStandardMaterial({ color: 0xcfd4d8, roughness: 0.7 });
+
+        const baseHeight = 1.2;
+        const centreY = baseHeight + radius * 0.36;
+        const cutoff = -0.42; // panels below this (as a share of the radius) are hidden inside the collar
+
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.45, radius * 0.6, baseHeight, 16), greyMat);
+        base.position.y = baseHeight / 2;
+        group.add(base);
+        // Collar round the bottom edge of the dome, hiding the panels' ragged lower rim
+        const collar = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.96, radius * 0.9, radius * 0.22, 32), greyMat);
+        collar.position.y = centreY - radius * 0.36;
+        group.add(collar);
+
+        const ico = mergeVertices(new THREE.IcosahedronGeometry(1, 4).deleteAttribute('normal').deleteAttribute('uv'));
+        const pos = ico.attributes.position;
+        const index = ico.index.array;
+        const vertex = (i) => new THREE.Vector3().fromBufferAttribute(pos, i);
+
+        // Panel corners are the triangle centres around each icosahedron vertex
+        const faceCentres = [];
+        const facesAround = Array.from({ length: pos.count }, () => []);
+        for (let f = 0; f < index.length / 3; f++) {
+            const a = index[f * 3], b = index[f * 3 + 1], c = index[f * 3 + 2];
+            faceCentres.push(vertex(a).add(vertex(b)).add(vertex(c)).normalize());
+            facesAround[a].push(f);
+            facesAround[b].push(f);
+            facesAround[c].push(f);
+        }
+
+        const seamMat = new THREE.MeshStandardMaterial({ color: 0x6f7a84, roughness: 0.8 });
+        const underLayer = new THREE.Mesh(new THREE.SphereGeometry(radius * 0.985, 48, 24, 0, Math.PI * 2, 0, Math.acos(cutoff)), seamMat);
+        underLayer.position.y = centreY;
+        group.add(underLayer);
+
+        const panelPositions = [];
+        const panelNormals = [];
+        const panelShrink = 0.9;
+        const e1 = new THREE.Vector3();
+        const e2 = new THREE.Vector3();
+        for (let v = 0; v < pos.count; v++) {
+            const n = vertex(v);
+            if (n.y < cutoff) continue;
+
+            // Corners in order round the panel centre, so the fan faces outward
+            e1.set(0, 1, 0).cross(n);
+            if (e1.lengthSq() < 1e-6) e1.set(1, 0, 0);
+            e1.normalize();
+            e2.crossVectors(n, e1);
+            const corners = facesAround[v]
+                .map(f => faceCentres[f].clone().lerp(n, 1 - panelShrink).normalize())
+                .sort((p, q) => Math.atan2(p.dot(e2), p.dot(e1)) - Math.atan2(q.dot(e2), q.dot(e1)));
+
+            for (let k = 0; k < corners.length; k++) {
+                const p = corners[k];
+                const q = corners[(k + 1) % corners.length];
+                for (const point of [n, p, q]) {
+                    panelPositions.push(point.x * radius, point.y * radius + centreY, point.z * radius);
+                    panelNormals.push(n.x, n.y, n.z);
+                }
+            }
+        }
+
+        const panelGeo = new THREE.BufferGeometry();
+        panelGeo.setAttribute('position', new THREE.Float32BufferAttribute(panelPositions, 3));
+        panelGeo.setAttribute('normal', new THREE.Float32BufferAttribute(panelNormals, 3));
+        group.add(new THREE.Mesh(panelGeo, panelMat));
+
+        group.userData.topHeight = centreY + radius;
+        return group;
+    }
+
+    // Safety net round the helideck edge: a strip of rope mesh sloping slightly up and out from the pad,
+    // with a thin outer rail and a bracket under each corner
+    buildHelideckNet(padRadius, railMat) {
+        const width = 1.5;
+        const outerRadius = padRadius + width / Math.cos(Math.PI / 6);
+        const innerY = this.deckHeight - 0.15;
+        const outerY = this.deckHeight + 0.1;
+        const cell = 0.5; // size of one mesh opening
+        // Same corner angles as the hexagonal pad (CylinderGeometry puts its first corner on +Z)
+        const corner = (radius, k, y) => new THREE.Vector3(
+            this.deckOffset + radius * Math.sin(k * Math.PI / 3), y, radius * Math.cos(k * Math.PI / 3));
+
+        const positions = [];
+        const uvs = [];
+        const index = [];
+        const overhang = (outerRadius - padRadius) / 2; // the outer edge is longer by this much at each end
+        for (let k = 0; k < 6; k++) {
+            const a = corner(padRadius, k, innerY);
+            const b = corner(padRadius, k + 1, innerY);
+            const c = corner(outerRadius, k + 1, outerY);
+            const d = corner(outerRadius, k, outerY);
+            const base = positions.length / 3;
+            positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+            uvs.push(0, 0, padRadius / cell, 0, (padRadius + overhang) / cell, width / cell, -overhang / cell, width / cell);
+            index.push(base, base + 1, base + 2, base, base + 2, base + 3);
+
+            this.group.add(this.createRod(d, c, 0.07, railMat));
+            this.group.add(this.createRod(corner(padRadius - 0.3, k, this.deckHeight - 0.5), d, 0.07, railMat));
+        }
+
+        const netGeo = new THREE.BufferGeometry();
+        netGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        netGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        netGeo.setIndex(index);
+        netGeo.computeVertexNormals();
+
+        // One diagonal cross per tile; tiled, the crosses join into a diamond rope mesh
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(32, 32);
+        ctx.moveTo(32, 0);
+        ctx.lineTo(0, 32);
+        ctx.stroke();
+        const netTexture = new THREE.CanvasTexture(canvas);
+        netTexture.wrapS = THREE.RepeatWrapping;
+        netTexture.wrapT = THREE.RepeatWrapping;
+
+        // Transparent (not alphaTest): the rope lines are thinner than a pixel at this zoom and would vanish
+        const net = new THREE.Mesh(netGeo, new THREE.MeshStandardMaterial({
+            color: 0xd9d2b8,
+            map: netTexture,
+            transparent: true,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+            // Transparent + DoubleSide is otherwise drawn in two passes, flagging needsUpdate twice per frame
+            forceSinglePass: true,
+            roughness: 0.9
+        }));
+        this.group.add(net);
+    }
+
+    // Thin round bar from one point to another
+    createRod(from, to, radius, material) {
+        const length = from.distanceTo(to);
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 6), material);
+        rod.position.copy(from).add(to).multiplyScalar(0.5);
+        rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+        return rod;
+    }
+
+    // Light pools of the six green deck lamps, in the deck's texture space. Same falloff as the island's bake
+    // (three.js PointLight, range 15, decay 2), stored pre-multiplied by lightMapScale.
+    // lampShare: lamp distance from the pad centre as a share of the pad radius
+    buildDeckLightMap(lampShare) {
+        const size = 128;
+        const padRadius = 7.2;
+        const range = 15.0;
+        // Lower than the island's 2: six lamps on a small pad would otherwise add up to an evenly green deck
+        const height = 1.0;
+        this.lightMapScale = 3.0;
+        const green = new THREE.Color(0x00ff66);
+        const accum = new Float32Array(size * size);
+
+        for (let k = 0; k < 6; k++) {
+            const a = Math.PI / 2 + k * Math.PI / 3;
+            // Texture u/v run 0..1 across the pad's circle (CircleGeometry uv), canvas y runs top-down
+            const lx = lampShare * Math.cos(a) * padRadius;
+            const ly = lampShare * Math.sin(a) * padRadius;
+            for (let py = 0; py < size; py++) {
+                for (let px = 0; px < size; px++) {
+                    const x = ((px + 0.5) / size * 2 - 1) * padRadius;
+                    const y = (1 - (py + 0.5) / size * 2) * padRadius;
+                    const distSq = (x - lx) ** 2 + (y - ly) ** 2 + height * height;
+                    const dist = Math.sqrt(distSq);
+                    if (dist >= range) continue;
+                    const cutoff = Math.pow(Math.max(0, 1 - Math.pow(dist / range, 4)), 2);
+                    accum[py * size + px] += (height / dist) / distSq * cutoff;
+                }
+            }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(size, size);
+        for (let p = 0; p < size * size; p++) {
+            const v = accum[p] * this.lightMapScale * 255;
+            imgData.data[p * 4] = green.r * v;
+            imgData.data[p * 4 + 1] = green.g * v;
+            imgData.data[p * 4 + 2] = green.b * v;
+            imgData.data[p * 4 + 3] = 255;
+        }
+        ctx.putImageData(imgData, 0, 0);
+        return new THREE.CanvasTexture(canvas);
     }
 
     createHelideckTexture() {
@@ -258,7 +482,14 @@ export class SupportShip {
         ctx.fillRect(0, 0, 128, 128);
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 4;
-        ctx.strokeRect(4, 4, 120, 120);
+        // Edge line along the hexagon (corners at the same angles as the pad's)
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) {
+            const a = Math.PI / 2 + k * Math.PI / 3;
+            ctx.lineTo(64 + 60 * Math.cos(a), 64 - 60 * Math.sin(a));
+        }
+        ctx.closePath();
+        ctx.stroke();
 
         ctx.strokeStyle = '#f2c230';
         ctx.lineWidth = 6;
@@ -274,7 +505,10 @@ export class SupportShip {
         return new THREE.CanvasTexture(canvas);
     }
 
-    update() {
+    update(nightFactor = 0) {
+        // Island light map strength (mainbase.js update) times 0.45: six lamps on a small pad, matched by eye at night
+        this.deckMaterial.lightMapIntensity = nightFactor * 3.5 / this.lightMapScale * 0.45;
+
         const angle = ((Date.now() / 1000) * this.speed / this.routeRadius) % (Math.PI * 2);
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);

@@ -357,7 +357,7 @@ export class Game {
         }
 
         // Before the player, so a helicopter on the deck moves with this frame's ship position
-        if (this.ship) this.ship.update();
+        if (this.ship) this.ship.update(nightFactor);
 
         if (this.player) {
             this.player.update(delta, nightFactor, windForce);
