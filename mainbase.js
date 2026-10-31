@@ -16,13 +16,18 @@ export class MainBase {
         this.baseTexture = new THREE.Texture();
         this.snowTexture = new THREE.Texture();
 
-        this.loadTransparentTexture('mainbase.png', (tex) => {
+        // Load mainbase.png directly as a clean transparent texture (background already removed)
+        textureLoader.load('mainbase.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
             this.baseTexture = tex;
             if (this.material.map === this.baseTexture) {
                 this.material.needsUpdate = true;
             }
         });
 
+        // Load mainbase_snow.png using the dynamic background remover specifically for the snow version
         this.loadTransparentTexture('mainbase_snow.png', (tex) => {
             this.snowTexture = tex;
             if (this.material.map === this.snowTexture) {
