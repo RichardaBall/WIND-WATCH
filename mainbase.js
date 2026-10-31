@@ -299,7 +299,7 @@ export class MainBase {
     update(delta, nightFactor, cameraQuaternion, searchLightSystem = null, weather = '') {
         const weatherStr = (weather || window.weather || window.currentWeather || '').toString().toUpperCase();
         const hasSnow = weatherStr.includes('SNOW');
-        const hasRain = weatherStr.includes('RAIN');
+        const hasRain = weatherStr.includes('RAIN') || weatherStr.includes('STORM');
         const targetMap = hasSnow ? this.snowTexture : (hasRain ? this.rainTexture : this.baseTexture);
         if (this.material.map !== targetMap && targetMap.image) {
             this.material.map = targetMap;
