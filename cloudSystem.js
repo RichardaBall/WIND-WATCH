@@ -11,8 +11,8 @@ export class CloudSystem {
         
         this.params = {
             maxCount: 250,        // Maximum total pool size allocated in memory
-            altitudeLow: 14,
-            altitudeHigh: 45,
+            altitudeLow: 30,
+            altitudeHigh: 52,
             size: 38.0,
             opacity: 0.65
         };

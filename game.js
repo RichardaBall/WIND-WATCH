@@ -33,7 +33,6 @@ export class Game {
         this.networkTimer = 0;
         this.logicThrottleTimer = 0;
 
-        // Pre-allocated scratch vectors for update/animate loop
         this._scratchVector1 = new THREE.Vector3();
         this._scratchVector2 = new THREE.Vector3();
         this._scratchVector3 = new THREE.Vector3();
@@ -55,7 +54,6 @@ export class Game {
 
         this.player = new HelicopterPlayer(scene);
 
-        // --- Default Spawn Position on Helipad 1 ---
         const defaultSpawnPos = new THREE.Vector3(8.41, 19.81, -6.54);
 
         this.player.group.position.copy(defaultSpawnPos);
@@ -70,7 +68,7 @@ export class Game {
         this.searchLightSystem = new SearchLightSystem(scene, this.player.group);
         this.navRadar = new NavRadar(scene, this.player, camera);
 
-        this.collisionManager = new CollisionManager(scene, this.player, this.windFarm);
+        this.collisionManager = new CollisionManager(scene, this.player, this.windFarm, this.mainBase);
         this.missionManager = new MissionManager(scene, this.navRadar, this.windFarm, this.helicopterSystems, this.player, camera, this.searchLightSystem, null);
         this.hudManager = new HudManager(this.player, this.helicopterSystems, this.searchLightSystem);
 

@@ -1,4 +1,3 @@
-// mainbase.js
 import * as THREE from 'three';
 
 export class MainBase {
@@ -11,43 +10,35 @@ export class MainBase {
         this.group.position.set(0, 20, 0); 
         scene.add(this.group);
 
-        const textureLoader = new THREE.TextureLoader();
-        
         this.baseTexture = new THREE.Texture();
         this.snowTexture = new THREE.Texture();
         this.rainTexture = new THREE.Texture();
 
-        // Load mainbase.png directly as a clean transparent texture
-        textureLoader.load('mainbase.png', (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
+        this.basePixelData = null;
+        this.snowPixelData = null;
+        this.rainPixelData = null;
+        this.texWidth = 512;
+        this.texHeight = 512;
+
+        this.loadTextureWithPixelData('mainbase.png', (tex, data, w, h) => {
             this.baseTexture = tex;
-            if (this.material.map === this.baseTexture) {
+            this.basePixelData = data;
+            this.texWidth = w;
+            this.texHeight = h;
+            if (this.material.map === this.baseTexture || !this.material.map) {
+                this.material.map = this.baseTexture;
                 this.material.needsUpdate = true;
             }
         });
 
-        // Load mainbase_snow.png directly (assuming background is already cleanly removed)
-        textureLoader.load('mainbase_snow.png', (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
+        this.loadTextureWithPixelData('mainbase_snow.png', (tex, data, w, h) => {
             this.snowTexture = tex;
-            if (this.material.map === this.snowTexture) {
-                this.material.needsUpdate = true;
-            }
+            this.snowPixelData = data;
         });
 
-        // Load mainbase_rain.png directly (assuming background is already cleanly removed)
-        textureLoader.load('mainbase_rain.png', (tex) => {
-            tex.colorSpace = THREE.SRGBColorSpace;
-            tex.minFilter = THREE.LinearFilter;
-            tex.magFilter = THREE.LinearFilter;
+        this.loadTextureWithPixelData('mainbase_rain.png', (tex, data, w, h) => {
             this.rainTexture = tex;
-            if (this.material.map === this.rainTexture) {
-                this.material.needsUpdate = true;
-            }
+            this.rainPixelData = data;
         });
 
         this.material = new THREE.MeshStandardMaterial({
@@ -69,7 +60,7 @@ export class MainBase {
             color: 0x00ffcc,
             wireframe: true,
             transparent: true,
-            opacity: 0.0, // Fully invisible while maintaining bounds
+            opacity: 0.0,
             visible: false
         });
 
@@ -160,7 +151,6 @@ export class MainBase {
                 { x: -12.71, y: 9.1, z: 2, scale: 0.15 },
                 { x: -7.44, y: 7.03, z: 2, scale: 0.15 },
                 { x: -8.18, y: 9.53, z: 2, scale: 0.15 },
-                // Solid green light (Harbour starboard light)
                 { x: 29.95, y: -10.27, z: 2, scale: 0.1, flashing: false },
             ],
             red: [
@@ -172,45 +162,40 @@ export class MainBase {
                 { x: -11.19, y: 11.92, z: 2, scale: 0.15 },
                 { x: -17.8, y: 7.27, z: 2, scale: 0.15 },
                 { x: -2.75, y: 8.55, z: 2, scale: 0.15 },
-                // Flashing red light (Tower light)
                 { x: 9.13, y: 20.43, z: 2, scale: 0.14, flashing: true, flashInterval: 0.9 },
-                // Solid red light (Water tower light)
                 { x: 2.93, y: 21.27, z: 2, scale: 0.1, flashing: false },
-                // Solid red light (Harbour port light)
                 { x: 26.1, y: -11.7, z: 2, scale: 0.1, flashing: false },
             ],
             amber: [
-                // Solid amber lights (Taxi lights)
-                { x: 3.3, y: 6.3, z: 2, scale: 0.1, flashing: false }, // Taxi Light1 (Amber)
-                { x: 0.38, y: 3.79, z: 2, scale: 0.1, flashing: false }, // Taxi Light2 (Amber)
-                { x: -3.0, y: 0.6, z: 2, scale: 0.1, flashing: false }, // Taxi Light3 (Amber)
+                { x: 3.3, y: 6.3, z: 2, scale: 0.1, flashing: false },
+                { x: 0.38, y: 3.79, z: 2, scale: 0.1, flashing: false },
+                { x: -3.0, y: 0.6, z: 2, scale: 0.1, flashing: false },
             ],
             white: [
-                // Solid white light (Harbour Building Light)
-                { x: 23.75, y: 1.31, z: 2.0, scale: 0.1, flashing: false }, // Harbour Building Light (White)
-                { x: 3.25, y: -5.86, z: 2, scale: 0.1, flashing: false }, // SE Building 1 (White)
-                { x: -0.54, y: -6.75, z: 2, scale: 0.1, flashing: false }, // SE Building 2 (White)
-                { x: -11.99, y: 0, z: 2, scale: 0.1, flashing: false }, // S Building (White)
-                { x: -19.41, y: 3.64, z: 2, scale: 0.1, flashing: false }, // SW Building (White)
-                { x: -6.15, y: 1.4, z: 2, scale: 0.1, flashing: false }, // S Guard Building (White)
-                { x: 25.89, y: -2.22, z: 2, scale: 0.1, flashing: false }, // Pier 1 (White)
-                { x: 30.99, y: -4.23, z: 2, scale: 0.1, flashing: false }, // Pier 2 (White)
-                { x: 29.67, y: -7.01, z: 2, scale: 0.1, flashing: false }, // Pier 3 (White)
-                { x: 32.74, y: -3.87, z: 2, scale: 0.1, flashing: false }, // Pier Corner (White)
-                { x: 31.65, y: -7.74, z: 2, scale: 0.1, flashing: false }, // Pier Boat (White)
-                { x: 13.64, y: -8.4, z: 2, scale: 0.1, flashing: false }, // Heli Per Light SE (White)
-                { x: 20.1, y: -0.3, z: 2, scale: 0.1, flashing: false }, // Heli Per Light NE (White)
-                { x: -21.42, y: 8.76, z: 2, scale: 0.1, flashing: false }, // Heli Per Light SW (White)
-                { x: -8.03, y: 14.08, z: 2, scale: 0.1, flashing: false }, // Water Tank (White)
-                { x: -1.08, y: 15.54, z: 2, scale: 0.1, flashing: false }, // N Guard House (White)
-                { x: 2.7, y: 10.5, z: 2, scale: 0.1, flashing: false }, // Hanger Mid (White)
-                { x: 0.96, y: 11.09, z: 2, scale: 0.1, flashing: false }, // Hanger Left (White)
-                { x: 4.58, y: 10.01, z: 2, scale: 0.1, flashing: false }, // Hanger Right (White)
-                { x: 10.62, y: 7.55, z: 2, scale: 0.1, flashing: false }, // E Workshop (White)
-                { x: 11.22, y: 12.28, z: 2, scale: 0.1, flashing: false }, // N Workshop (White)
-                { x: 15.3, y: 10.8, z: 2, scale: 0.1, flashing: false }, // NE Light (White)
-                { x: 17.86, y: 4.28, z: 2, scale: 0.1, flashing: false }, // SE Workshop (White)
-                { x: -8.4, y: -5.1, z: 4, scale: 0, flashing: false }, // S Street Light (White)
+                { x: 23.75, y: 1.31, z: 2.0, scale: 0.1, flashing: false },
+                { x: 3.25, y: -5.86, z: 2, scale: 0.1, flashing: false },
+                { x: -0.54, y: -6.75, z: 2, scale: 0.1, flashing: false },
+                { x: -11.99, y: 0, z: 2, scale: 0.1, flashing: false },
+                { x: -19.41, y: 3.64, z: 2, scale: 0.1, flashing: false },
+                { x: -6.15, y: 1.4, z: 2, scale: 0.1, flashing: false },
+                { x: 25.89, y: -2.22, z: 2, scale: 0.1, flashing: false },
+                { x: 30.99, y: -4.23, z: 2, scale: 0.1, flashing: false },
+                { x: 29.67, y: -7.01, z: 2, scale: 0.1, flashing: false },
+                { x: 32.74, y: -3.87, z: 2, scale: 0.1, flashing: false },
+                { x: 31.65, y: -7.74, z: 2, scale: 0.1, flashing: false },
+                { x: 13.64, y: -8.4, z: 2, scale: 0.1, flashing: false },
+                { x: 20.1, y: -0.3, z: 2, scale: 0.1, flashing: false },
+                { x: -21.42, y: 8.76, z: 2, scale: 0.1, flashing: false },
+                { x: -8.03, y: 14.08, z: 2, scale: 0.1, flashing: false },
+                { x: -1.08, y: 15.54, z: 2, scale: 0.1, flashing: false },
+                { x: 2.7, y: 10.5, z: 2, scale: 0.1, flashing: false },
+                { x: 0.96, y: 11.09, z: 2, scale: 0.1, flashing: false },
+                { x: 4.58, y: 10.01, z: 2, scale: 0.1, flashing: false },
+                { x: 10.62, y: 7.55, z: 2, scale: 0.1, flashing: false },
+                { x: 11.22, y: 12.28, z: 2, scale: 0.1, flashing: false },
+                { x: 15.3, y: 10.8, z: 2, scale: 0.1, flashing: false },
+                { x: 17.86, y: 4.28, z: 2, scale: 0.1, flashing: false },
+                { x: -8.4, y: -5.1, z: 4, scale: 0, flashing: false },
             ]
         };
 
@@ -219,6 +204,72 @@ export class MainBase {
         this.buildLightGroup('red', 0xff0033);
         this.buildLightGroup('amber', 0xffaa00);
         this.buildLightGroup('white', 0xffffff);
+    }
+
+    loadTextureWithPixelData(url, callback) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = url;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+
+            if (callback) callback(texture, imgData, img.width, img.height);
+        };
+        img.onerror = () => {
+            // Fallback if image fails or cross-origin blocks canvas read
+            const texture = new THREE.TextureLoader().load(url);
+            if (callback) callback(texture, null, 512, 512);
+        };
+    }
+
+    isOpaqueAtWorldPosition(worldPos) {
+        let pixelData = this.basePixelData;
+        if (this.material.map === this.snowTexture && this.snowPixelData) {
+            pixelData = this.snowPixelData;
+        } else if (this.material.map === this.rainTexture && this.rainPixelData) {
+            pixelData = this.rainPixelData;
+        }
+
+        // If pixel data isn't loaded yet or couldn't be read due to security sandbox, fallback to a radial distance check for the island solid body
+        if (!pixelData) {
+            const dx = worldPos.x;
+            const dz = worldPos.z;
+            return (dx * dx + dz * dz) < (28.0 * 28.0);
+        }
+
+        const localPos = worldPos.clone();
+        this.group.worldToLocal(localPos);
+
+        const halfSize = 36.0; // PlaneGeometry is 72x72, so half-size is 36
+        if (localPos.x < -halfSize || localPos.x > halfSize || localPos.z < -halfSize || localPos.z > halfSize) {
+            return false;
+        }
+
+        // Map local X/Z coordinates to UV space (0 to 1)
+        const u = (localPos.x + halfSize) / (halfSize * 2);
+        const v = 1.0 - (localPos.z + halfSize) / (halfSize * 2);
+
+        const px = Math.floor(u * this.texWidth);
+        const py = Math.floor(v * this.texHeight);
+
+        if (px < 0 || px >= this.texWidth || py < 0 || py >= this.texHeight) {
+            return false;
+        }
+
+        const index = (py * this.texWidth + px) * 4 + 3;
+        const alpha = pixelData.data[index];
+
+        return alpha > 40; // True if pixel is opaque
     }
 
     buildLightGroup(category, colorHex) {
@@ -250,7 +301,7 @@ export class MainBase {
         const hasSnow = weatherStr.includes('SNOW');
         const hasRain = weatherStr.includes('RAIN');
         const targetMap = hasSnow ? this.snowTexture : (hasRain ? this.rainTexture : this.baseTexture);
-        if (this.material.map !== targetMap) {
+        if (this.material.map !== targetMap && targetMap.image) {
             this.material.map = targetMap;
             this.material.needsUpdate = true;
         }
@@ -280,7 +331,6 @@ export class MainBase {
 
         const elapsedTime = Date.now() * 0.001;
 
-        // Calculate particles across the 5 line segments using Center, Rotation, and Length
         let particleIdx = 0;
 
         for (let l = 0; l < this.lineSegments.length; l++) {
