@@ -1,7 +1,8 @@
 import { io } from 'https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.esm.min.js';
 
 export class NetworkManager {
-    constructor(serverUrl = 'https://wind-watch-server.onrender.com') {
+    // Add ?server=http://localhost:3000 to the page address to test against a local server.js
+    constructor(serverUrl = new URLSearchParams(window.location.search).get('server') || 'https://wind-watch-server.onrender.com') {
         this.socket = io(serverUrl);
         this.callbacks = {};
 
