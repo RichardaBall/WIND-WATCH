@@ -16,7 +16,7 @@ export default class HelicopterPlayer {
         this._scratchVector2D_moveDir = new THREE.Vector2();
 
         const textureLoader = new THREE.TextureLoader();
-        this.totalFrames = 8;
+        this.totalFrames = 16;
 
         const geometry = new THREE.PlaneGeometry(24, 24);
         
@@ -115,7 +115,8 @@ export default class HelicopterPlayer {
         this.dropLine.frustumCulled = false;
         this.scene.add(this.dropLine);
 
-        this.currentFrame = 5;
+        // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6 (2 * 22.5° + 4 * 22.5° = 135°)
+        this.currentFrame = 6;
 
         textureLoader.load('helicopter_gear.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
@@ -198,7 +199,7 @@ export default class HelicopterPlayer {
         this.isWinchActive = false;
         this.winchState = 'STOWED';
         this.winchTimer = 0;
-        this.currentFrame = 5;
+        this.currentFrame = 6; // SE on reset
         this.verticalVelocity = 0;
         this.currentSpeed = 0;
         this.landingPadTarget = null;
@@ -212,11 +213,11 @@ export default class HelicopterPlayer {
 
         if (this.gearDownTex && this.material) {
             this.material.map = this.gearDownTex;
-            this.material.map.offset.x = 5 * (1 / this.totalFrames);
+            this.material.map.offset.x = 6 * (1 / this.totalFrames);
             this.material.needsUpdate = true;
         }
         if (this.emissiveTex && this.material) {
-            this.material.emissiveMap.offset.x = 5 * (1 / this.totalFrames);
+            this.material.emissiveMap.offset.x = 6 * (1 / this.totalFrames);
             this.material.needsUpdate = true;
         }
         this.group.position.set(8.41, 19.81, -6.54);
@@ -595,11 +596,12 @@ export default class HelicopterPlayer {
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
 
-                const angle = Math.atan2(moveDir.y, moveDir.x) + Math.PI;
-                let normalized = (angle + Math.PI * 2) % (Math.PI * 2);
-                
-                const frameIndex = Math.floor((normalized / (Math.PI * 2)) * this.totalFrames + 0.5) % this.totalFrames;
-                this.currentFrame = frameIndex;
+                // Calculate angle clockwise from North where Index 2 = North (0 radians)
+                const angle = Math.atan2(moveDir.x, -moveDir.y);
+                const stepSize = (Math.PI * 2) / this.totalFrames;
+                const steps = Math.round(angle / stepSize);
+                const frameIndex = (2 + steps) % this.totalFrames;
+                this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
 
                 const frameOffset = this.currentFrame * (1 / this.totalFrames);
                 if (this.material.map) {
@@ -616,10 +618,10 @@ export default class HelicopterPlayer {
             this.currentSpeed = 0;
         }
 
-        const headingAngle = (this.currentFrame / this.totalFrames) * (Math.PI * 2) + Math.PI;
+        const headingAngle = ((this.currentFrame - 2) / this.totalFrames) * (Math.PI * 2);
         const forwardDist = 5.0;
         const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
-        const targetZ = currentPos.z + Math.cos(headingAngle) * forwardDist;
+        const targetZ = currentPos.z - Math.cos(headingAngle) * forwardDist;
         const targetY = currentPos.y - 5.5;
         
         this.searchLightTarget.position.set(targetX, targetY, targetZ);
