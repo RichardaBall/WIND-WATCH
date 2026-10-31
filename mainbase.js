@@ -15,8 +15,9 @@ export class MainBase {
         
         this.baseTexture = new THREE.Texture();
         this.snowTexture = new THREE.Texture();
+        this.rainTexture = new THREE.Texture();
 
-        // Load mainbase.png directly as a clean transparent texture (background already removed)
+        // Load mainbase.png directly as a clean transparent texture
         textureLoader.load('mainbase.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
@@ -27,10 +28,24 @@ export class MainBase {
             }
         });
 
-        // Load mainbase_snow.png using the dynamic background remover specifically for the snow version
-        this.loadTransparentTexture('mainbase_snow.png', (tex) => {
+        // Load mainbase_snow.png directly (assuming background is already cleanly removed)
+        textureLoader.load('mainbase_snow.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
             this.snowTexture = tex;
             if (this.material.map === this.snowTexture) {
+                this.material.needsUpdate = true;
+            }
+        });
+
+        // Load mainbase_rain.png directly (assuming background is already cleanly removed)
+        textureLoader.load('mainbase_rain.png', (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            this.rainTexture = tex;
+            if (this.material.map === this.rainTexture) {
                 this.material.needsUpdate = true;
             }
         });
@@ -204,231 +219,7 @@ export class MainBase {
         this.buildLightGroup('red', 0xff0033);
         this.buildLightGroup('amber', 0xffaa00);
         this.buildLightGroup('white', 0xffffff);
-
-        /* --- CONFIGURABLE LIGHT TOOL (COMMENTED OUT / HIDDEN FROM GAME) ---
-        this.configurableLightConfig = {
-            x: 0.0,
-            y: 0.0,
-            z: 0.1,
-            scale: 0.1,
-            color: 'White',
-            name: 'New Light'
-        };
-
-        const colorMap = {
-            'Red': 0xff0033,
-            'Green': 0x00ff66,
-            'White': 0xffffff,
-            'Amber': 0xffaa00
-        };
-
-        const configGeo = new THREE.SphereGeometry(1, 16, 16);
-        const configMat = new THREE.MeshBasicMaterial({ color: colorMap[this.configurableLightConfig.color], depthTest: true });
-        this.configurableMarker = new THREE.Mesh(configGeo, configMat);
-        this.configurableMarker.position.set(this.configurableLightConfig.x, this.configurableLightConfig.y, this.configurableLightConfig.z);
-        this.configurableMarker.scale.set(this.configurableLightConfig.scale, this.configurableLightConfig.scale, this.configurableLightConfig.scale);
-        this.group.add(this.configurableMarker);
-
-        this.configurablePointLight = new THREE.PointLight(colorMap[this.configurableLightConfig.color], 0.0, 15);
-        this.configurablePointLight.position.set(this.configurableLightConfig.x, this.configurableLightConfig.y, this.configurableLightConfig.z);
-        this.group.add(this.configurablePointLight);
-
-        this.initConfigurableLightTool();
-        ------------------------------------------------------------- */
     }
-
-    /* --- COMMENTED OUT TOOL FUNCTION (Uncomment when you want to use it again) ---
-    initConfigurableLightTool() {
-        const toggleBtn = document.createElement('button');
-        toggleBtn.textContent = '⚙️ Light Tool';
-        toggleBtn.style.position = 'absolute';
-        toggleBtn.style.top = '10px';
-        toggleBtn.style.right = '10px';
-        toggleBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-        toggleBtn.style.color = '#ffffff';
-        toggleBtn.style.border = '1px solid #555';
-        toggleBtn.style.padding = '6px 10px';
-        toggleBtn.style.borderRadius = '4px';
-        toggleBtn.style.cursor = 'pointer';
-        toggleBtn.style.zIndex = '9999';
-        toggleBtn.style.fontFamily = 'sans-serif';
-        toggleBtn.style.fontSize = '12px';
-        document.body.appendChild(toggleBtn);
-
-        const container = document.createElement('div');
-        container.style.position = 'absolute';
-        container.style.top = '10px';
-        container.style.right = '10px';
-        container.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-        container.style.color = '#ffffff';
-        container.style.padding = '12px';
-        container.style.borderRadius = '8px';
-        container.style.fontFamily = 'sans-serif';
-        container.style.fontSize = '12px';
-        container.style.zIndex = '9999';
-        container.style.boxShadow = '0 4px 6px rgba(0,0,0,0.3)';
-        container.style.width = '240px';
-        container.style.display = 'none';
-
-        container.innerHTML = `
-            <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #555; padding-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-                <span>Configurable Light Controls</span>
-                <button id="closeBtn" style="background: none; border: none; color: #aaa; cursor: pointer; font-size: 14px; font-weight: bold;">✕</button>
-            </div>
-            
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>Light Name:</label>
-                <input type="text" id="lightName" value="${this.configurableLightConfig.name}" style="width: 100px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-            </div>
-
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>Color:</label>
-                <select id="colorSelect" style="width: 100px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-                    <option value="Red">Red</option>
-                    <option value="Green">Green</option>
-                    <option value="White" selected>White</option>
-                    <option value="Amber">Amber</option>
-                </select>
-            </div>
-
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>X Position:</label>
-                <input type="number" id="numX" step="0.01" value="${this.configurableLightConfig.x}" style="width: 90px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-            </div>
-            <input type="range" id="posX" min="-30" max="30" step="0.01" value="${this.configurableLightConfig.x}" style="width: 100%; margin-bottom: 8px;">
-
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>Y Position:</label>
-                <input type="number" id="numY" step="0.01" value="${this.configurableLightConfig.y}" style="width: 90px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-            </div>
-            <input type="range" id="posY" min="-30" max="30" step="0.01" value="${this.configurableLightConfig.y}" style="width: 100%; margin-bottom: 8px;">
-
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>Z Position:</label>
-                <input type="number" id="numZ" step="0.01" value="${this.configurableLightConfig.z}" style="width: 90px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-            </div>
-            <input type="range" id="posZ" min="-5" max="10" step="0.01" value="${this.configurableLightConfig.z}" style="width: 100%; margin-bottom: 8px;">
-
-            <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-                <label>Scale:</label>
-                <input type="number" id="numScale" step="0.01" value="${this.configurableLightConfig.scale}" style="width: 90px; background: #222; color: #fff; border: 1px solid #555; padding: 2px 4px; border-radius: 4px;">
-            </div>
-            <input type="range" id="scale" min="0.01" max="0.5" step="0.01" value="${this.configurableLightConfig.scale}" style="width: 100%; margin-bottom: 10px;">
-
-            <button id="printBtn" style="width: 100%; background: #0088cc; color: #fff; border: none; padding: 6px; border-radius: 4px; font-weight: bold; cursor: pointer;">Print Light Info to Console</button>
-        `;
-
-        document.body.appendChild(container);
-
-        toggleBtn.addEventListener('click', () => {
-            container.style.display = 'block';
-            toggleBtn.style.display = 'none';
-        });
-
-        container.querySelector('#closeBtn').addEventListener('click', () => {
-            container.style.display = 'none';
-            toggleBtn.style.display = 'block';
-        });
-
-        const colorMap = {
-            'Red': 0xff0033,
-            'Green': 0x00ff66,
-            'White': 0xffffff,
-            'Amber': 0xffaa00
-        };
-
-        const updateLightProps = () => {
-            this.configurableMarker.position.set(this.configurableLightConfig.x, this.configurableLightConfig.y, this.configurableLightConfig.z);
-            this.configurablePointLight.position.set(this.configurableLightConfig.x, this.configurableLightConfig.y, this.configurableLightConfig.z);
-            this.configurableMarker.scale.set(this.configurableLightConfig.scale, this.configurableLightConfig.scale, this.configurableLightConfig.scale);
-            
-            const hexColor = colorMap[this.configurableLightConfig.color] || 0xffffff;
-            this.configurableMarker.material.color.setHex(hexColor);
-            this.configurablePointLight.color.setHex(hexColor);
-        };
-
-        container.querySelector('#lightName').addEventListener('input', (e) => {
-            this.configurableLightConfig.name = e.target.value;
-        });
-
-        container.querySelector('#colorSelect').addEventListener('change', (e) => {
-            this.configurableLightConfig.color = e.target.value;
-            updateLightProps();
-        });
-
-        container.querySelector('#printBtn').addEventListener('click', () => {
-            const codeSnippet = `{ x: ${this.configurableLightConfig.x}, y: ${this.configurableLightConfig.y}, z: ${this.configurableLightConfig.z}, scale: ${this.configurableLightConfig.scale}, flashing: false }, // ${this.configurableLightConfig.name} (${this.configurableLightConfig.color})`;
-            console.log("--- Configured Light Code Snippet ---");
-            console.log(codeSnippet);
-        });
-
-        const bindSync = (numId, rangeId, propName) => {
-            const numInput = container.querySelector(`#${numId}`);
-            const rangeInput = container.querySelector(`#${rangeId}`);
-
-            numInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                if (!isNaN(val)) {
-                    this.configurableLightConfig[propName] = val;
-                    rangeInput.value = val;
-                    updateLightProps();
-                }
-            });
-
-            rangeInput.addEventListener('input', (e) => {
-                const val = parseFloat(e.target.value);
-                this.configurableLightConfig[propName] = val;
-                numInput.value = val;
-                updateLightProps();
-            });
-        };
-
-        bindSync('numX', 'posX', 'x');
-        bindSync('numY', 'posY', 'y');
-        bindSync('numZ', 'posZ', 'z');
-        bindSync('numScale', 'scale', 'scale');
-    }
-    -------------------------------------------------------------- */
-
-    loadTransparentTexture(url, callback) {
-        const img = new Image();
-        img.src = url;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-
-            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const data = imgData.data;
-
-            const bgR = data[0];
-            const bgG = data[1];
-            const bgB = data[2];
-
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-
-                if (Math.abs(r - bgR) < 20 && Math.abs(g - bgG) < 20 && Math.abs(b - bgB) < 20) {
-                    data[i + 3] = 0;
-                }
-            }
-
-            ctx.putImageData(imgData, 0, 0);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.colorSpace = THREE.SRGBColorSpace;
-            texture.minFilter = THREE.LinearFilter;
-            texture.magFilter = THREE.LinearFilter;
-
-            if (callback) callback(texture);
-        };
-    }
-
-    resetFade() {}
 
     buildLightGroup(category, colorHex) {
         if (!this.lightConfigs[category]) return;
@@ -457,7 +248,8 @@ export class MainBase {
     update(delta, nightFactor, cameraQuaternion, searchLightSystem = null, weather = '') {
         const weatherStr = (weather || window.weather || window.currentWeather || '').toString().toUpperCase();
         const hasSnow = weatherStr.includes('SNOW');
-        const targetMap = hasSnow ? this.snowTexture : this.baseTexture;
+        const hasRain = weatherStr.includes('RAIN');
+        const targetMap = hasSnow ? this.snowTexture : (hasRain ? this.rainTexture : this.baseTexture);
         if (this.material.map !== targetMap) {
             this.material.map = targetMap;
             this.material.needsUpdate = true;
