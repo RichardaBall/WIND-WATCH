@@ -115,7 +115,7 @@ export default class HelicopterPlayer {
         this.dropLine.frustumCulled = false;
         this.scene.add(this.dropLine);
 
-        // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6 (2 * 22.5° + 4 * 22.5° = 135°)
+        // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6
         this.currentFrame = 6;
 
         textureLoader.load('helicopter_gear.png', (tex) => {
@@ -162,9 +162,17 @@ export default class HelicopterPlayer {
 
         this.group.position.set(8.41, 19.81, -6.54);
         this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
-        this.maxSpeed = 37.5;
+        
+        // Realistic Physics / Mass Parameters
+        this.maxSpeed = 32.0;
+        this.velocityXZ = new THREE.Vector2(0, 0); // True momentum vector
+        this.acceleration = 12.0;                  // How sluggishly/heavily it builds up speed (mass simulation)
+        this.drag = 1.8;                           // Air resistance / coasting deceleration
         this.currentSpeed = 0; 
         this.isMoving = false;
+
+        // Visual tilt/banking inertia variables
+        this.currentTiltZ = 0;
 
         this.engineState = 'OFF'; 
         this.targetAltitude = 19.81;  
@@ -201,7 +209,10 @@ export default class HelicopterPlayer {
         this.winchTimer = 0;
         this.currentFrame = 6; // SE on reset
         this.verticalVelocity = 0;
+        this.velocityXZ.set(0, 0);
         this.currentSpeed = 0;
+        this.currentTiltZ = 0;
+        this.mesh.rotation.z = 0;
         this.landingPadTarget = null;
         this.isTakingOff = false;
 
@@ -238,6 +249,7 @@ export default class HelicopterPlayer {
         this.engineState = 'CRASHED';
         this.isMoving = false;
         this.currentSpeed = 0;
+        this.velocityXZ.set(0, 0);
         this.verticalVelocity = 0;
         this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
@@ -272,6 +284,7 @@ export default class HelicopterPlayer {
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
+            this.velocityXZ.set(0, 0);
         }
     }
 
@@ -308,6 +321,7 @@ export default class HelicopterPlayer {
         this.engineState = 'SHUTTING_DOWN';
         this.isMoving = false;
         this.currentSpeed = 0;
+        this.velocityXZ.set(0, 0);
 
         if ((inPad1 || inPad2) && this.gearDown) {
             this.landingPadTarget = inPad1 ? new THREE.Vector3(pad1X, 19.81, pad1Z) : new THREE.Vector3(pad2X, 27.29, pad2Z);
@@ -335,6 +349,7 @@ export default class HelicopterPlayer {
             this.engineState = 'STARTING';
             this.isMoving = false;
             this.currentSpeed = 0;
+            this.velocityXZ.set(0, 0);
             this.flightStarted = true;
             this.isTakingOff = true;
             this.landingPadTarget = null;
@@ -415,6 +430,7 @@ export default class HelicopterPlayer {
             this.targetAltitude = 45.0;
             this.isMoving = false;
             this.currentSpeed = 0;
+            this.velocityXZ.set(0, 0);
             if (Math.abs(pos.y - 45.0) < 1.0) {
                 this.isTakingOff = false; 
             }
@@ -462,12 +478,14 @@ export default class HelicopterPlayer {
                 this.winchTimer = 1.5; 
                 this.isMoving = false;
                 this.currentSpeed = 0;
+                this.velocityXZ.set(0, 0);
                 this.targetPosition.copy(this.group.position);
             }
         } else if (this.winchState === 'LOWERING') {
             this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
+            this.velocityXZ.set(0, 0);
             this.targetPosition.copy(this.group.position);
             this.winchTimer -= delta;
             if (this.winchTimer <= 0) {
@@ -477,6 +495,7 @@ export default class HelicopterPlayer {
             this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
+            this.velocityXZ.set(0, 0);
             this.targetPosition.copy(this.group.position);
         } else if (this.winchState === 'CLIMBING') {
             this.targetAltitude = 45.0;
@@ -516,6 +535,7 @@ export default class HelicopterPlayer {
 
         const currentPos = this.group.position;
         
+        // Smooth vertical mass simulation
         const altitudeError = this.targetAltitude - currentPos.y;
         const verticalAccel = 2.5; 
         const verticalDamping = 3.0; 
@@ -530,7 +550,7 @@ export default class HelicopterPlayer {
 
             if (dist > 0.4) {
                 this.targetAltitude = 45.0; 
-                currentXZ.lerp(padXZ, delta * 4.0);
+                currentXZ.lerp(padXZ, delta * 3.0);
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
             } else {
@@ -564,59 +584,84 @@ export default class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
+        // --- NEWTONIAN PHYSICS & INERTIAL MOVEMENT ---
         if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = this._scratchVector2D_2.set(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
 
-            if (distance > 0.2) {
+            if (distance > 0.4) {
                 const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
-                const targetMaxSpeed = isSlow ? this.maxSpeed * 0.5 : this.maxSpeed;
+                const targetMaxSpeed = isSlow ? this.maxSpeed * 0.45 : this.maxSpeed;
 
+                // Desired direction vector towards click target
+                const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
+
+                // Slow down gracefully as we approach destination (braking distance simulation)
                 let desiredSpeed = targetMaxSpeed;
-                const slowingRadius = 15.0;
+                const slowingRadius = 22.0;
                 if (distance < slowingRadius) {
                     desiredSpeed = targetMaxSpeed * (distance / slowingRadius);
-                    desiredSpeed = Math.max(desiredSpeed, 2.0);
                 }
 
-                const accelerationRate = 25.0; 
-                this.currentSpeed = THREE.MathUtils.lerp(this.currentSpeed, desiredSpeed, delta * accelerationRate);
+                // Apply true acceleration towards desired velocity vector (simulates heavy mass/momentum)
+                const targetVelocity = moveDir.clone().multiplyScalar(desiredSpeed);
+                this.velocityXZ.lerp(targetVelocity, this.acceleration * delta);
 
-                const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
-                const step = this.currentSpeed * delta;
-                
-                if (distance < step) {
-                    currentXZ.copy(targetXZ);
-                    this.currentSpeed = 0;
-                } else {
-                    currentXZ.addScaledVector(moveDir, step);
-                }
-                
+                // Update position using true velocity vector
+                currentXZ.addScaledVector(this.velocityXZ, delta);
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
 
-                // Calculate angle clockwise from North where Index 2 = North (0 radians)
-                const angle = Math.atan2(moveDir.x, -moveDir.y);
-                const stepSize = (Math.PI * 2) / this.totalFrames;
-                const steps = Math.round(angle / stepSize);
-                const frameIndex = (2 + steps) % this.totalFrames;
-                this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
+                this.currentSpeed = this.velocityXZ.length();
 
-                const frameOffset = this.currentFrame * (1 / this.totalFrames);
-                if (this.material.map) {
-                    this.material.map.offset.x = frameOffset;
-                }
-                if (this.material.emissiveMap) {
-                    this.material.emissiveMap.offset.x = frameOffset;
+                // Calculate heading angle based on actual movement direction (makes turns look natural)
+                if (this.currentSpeed > 0.5) {
+                    const angle = Math.atan2(this.velocityXZ.x, -this.velocityXZ.y);
+                    const stepSize = (Math.PI * 2) / this.totalFrames;
+                    const steps = Math.round(angle / stepSize);
+                    const frameIndex = (2 + steps) % this.totalFrames;
+                    this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
+
+                    const frameOffset = this.currentFrame * (1 / this.totalFrames);
+                    if (this.material.map) {
+                        this.material.map.offset.x = frameOffset;
+                    }
+                    if (this.material.emissiveMap) {
+                        this.material.emissiveMap.offset.x = frameOffset;
+                    }
                 }
             } else {
-                this.isMoving = false;
-                this.currentSpeed = 0;
+                // Apply coasting / air drag when stopping at target
+                this.velocityXZ.multiplyScalar(Math.max(0, 1.0 - this.drag * delta));
+                currentXZ.addScaledVector(this.velocityXZ, delta);
+                currentPos.x = currentXZ.x;
+                currentPos.z = currentXZ.y;
+                this.currentSpeed = this.velocityXZ.length();
+
+                if (this.currentSpeed < 0.2) {
+                    this.isMoving = false;
+                    this.velocityXZ.set(0, 0);
+                    this.currentSpeed = 0;
+                }
             }
         } else {
+            // Apply drag when idle or stationary
+            if (this.velocityXZ.lengthSq() > 0.01) {
+                this.velocityXZ.multiplyScalar(Math.max(0, 1.0 - this.drag * delta));
+                currentPos.x += this.velocityXZ.x * delta;
+                currentPos.z += this.velocityXZ.y * delta;
+            } else {
+                this.velocityXZ.set(0, 0);
+            }
             this.currentSpeed = 0;
         }
+
+        // --- REALISTIC BANKING / TILT PHYSICS ---
+        // Tilt the sprite slightly into acceleration/turns to give physical weight sensation
+        const targetTilt = (this.velocityXZ.length() > 0.5) ? -this.velocityXZ.x * 0.015 : 0;
+        this.currentTiltZ = THREE.MathUtils.lerp(this.currentTiltZ, targetTilt, delta * 5.0);
+        this.mesh.rotation.z = this.currentTiltZ;
 
         const headingAngle = ((this.currentFrame - 2) / this.totalFrames) * (Math.PI * 2);
         const forwardDist = 5.0;
