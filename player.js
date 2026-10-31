@@ -15,8 +15,10 @@ function loadSharedSheet(url, onLoad, onError = () => {}) {
 }
 
 export default class HelicopterPlayer {
-    constructor(scene) {
+    constructor(scene, options = {}) {
         this.scene = scene;
+        // Remote helicopters are driven by game.js: they never crash and play sound through the local player's AudioManager
+        this.isRemote = !!options.isRemote;
         this.group = new THREE.Group();
         scene.add(this.group);
 
@@ -180,14 +182,16 @@ export default class HelicopterPlayer {
         this.targetAltitude = 19.81;  
         this.verticalVelocity = 0;
 
-        this.audioManager = new AudioManager();
-        
-        this.crashHandler = new crash(scene);
-        this.crashHandler.hideRestart();
-        this.crashHandler.showRestart(() => {
-            this.resetFlight();
-        });
-        this.crashHandler.hideRestart();
+        this.audioManager = options.audioManager || new AudioManager();
+
+        if (!this.isRemote) {
+            this.crashHandler = new crash(scene);
+            this.crashHandler.hideRestart();
+            this.crashHandler.showRestart(() => {
+                this.resetFlight();
+            });
+            this.crashHandler.hideRestart();
+        }
 
         this.hasCrashed = false;
         this.flightStarted = false;

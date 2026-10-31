@@ -98,7 +98,7 @@ export class Game {
         requestAnimationFrame(() => {
             if (!this.networkManager || !this.remotePlayers[id]?.isInitializing) return;
 
-            const remoteHeli = new HelicopterPlayer(this.scene);
+            const remoteHeli = new HelicopterPlayer(this.scene, { isRemote: true, audioManager: this.player.audioManager });
             const remotePlayerRef = { gearDown: data.gearDown ?? true };
             const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
             const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
