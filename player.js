@@ -134,6 +134,30 @@ export default class HelicopterPlayer {
         this.dropLine.frustumCulled = false;
         this.scene.add(this.dropLine);
 
+        // Landing aid: near a helipad the drop line ends on the pad surface (not at sea level, which in this
+        // view sits far from the pad) and a ring marks the touchdown point. Colour says what pressing E does now:
+        // green = lands on the pad, amber = inside the landing zone but gear is up, white = not inside yet.
+        this.landingPads = [
+            new THREE.Vector3(8.41, 19.81, -6.54),
+            new THREE.Vector3(-10.28, 27.29, 3.74)
+        ];
+        this.landingZoneHalfSize = 6.0; // Same zone shutdownEngine() checks
+        this.landingAidRange = 20.0;
+        if (!this.isRemote) {
+            const ringGeo = new THREE.RingGeometry(1.2, 1.8, 32);
+            ringGeo.rotateX(-Math.PI / 2);
+            this.landingMarker = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.9,
+                depthTest: false,
+                depthWrite: false
+            }));
+            this.landingMarker.renderOrder = 10;
+            this.landingMarker.visible = false;
+            this.scene.add(this.landingMarker);
+        }
+
         // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6 (2 * 22.5° + 4 * 22.5° = 135°)
         this.currentFrame = 6;
 
@@ -209,6 +233,7 @@ export default class HelicopterPlayer {
             this.group.visible = visible;
             if (this.shadowMesh) this.shadowMesh.visible = visible;
             if (this.dropLine) this.dropLine.visible = visible;
+            if (this.landingMarker && !visible) this.landingMarker.visible = false;
         }
     }
 
@@ -257,6 +282,7 @@ export default class HelicopterPlayer {
         if (this.hasCrashed) return;
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
+        if (this.landingMarker) this.landingMarker.visible = false;
         this.isMoving = false;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
@@ -572,9 +598,43 @@ export default class HelicopterPlayer {
             const heightFactor = Math.max(0.4, 1.0 - (currentPos.y / 60.0));
             this.shadowMesh.scale.set(heightFactor, heightFactor, heightFactor);
 
+            // Nearest helipad by the same square distance the landing zone uses
+            let nearPad = null;
+            let padDist = Infinity;
+            for (const pad of this.landingPads) {
+                const dist = Math.max(Math.abs(currentPos.x - pad.x), Math.abs(currentPos.z - pad.z));
+                if (dist < padDist && dist <= this.landingAidRange && currentPos.y > pad.y) {
+                    nearPad = pad;
+                    padDist = dist;
+                }
+            }
+
+            const lineMat = this.dropLine.material;
+            let lineBottomY = 0.2;
+            if (nearPad && this.engineState !== 'OFF') {
+                const inZone = padDist <= this.landingZoneHalfSize;
+                const aidColor = inZone ? (this.gearDown ? 0x22c55e : 0xf59e0b) : 0xffffff;
+                lineBottomY = nearPad.y;
+                lineMat.color.setHex(aidColor);
+                lineMat.opacity = 0.95;
+                lineMat.dashSize = 0.6;
+                lineMat.gapSize = 0.3;
+                if (this.landingMarker) {
+                    this.landingMarker.position.set(currentPos.x, nearPad.y + 0.05, currentPos.z);
+                    this.landingMarker.material.color.setHex(aidColor);
+                    this.landingMarker.visible = true;
+                }
+            } else {
+                lineMat.color.setHex(0xffffff);
+                lineMat.opacity = 0.25;
+                lineMat.dashSize = 0.2;
+                lineMat.gapSize = 0.6;
+                if (this.landingMarker) this.landingMarker.visible = false;
+            }
+
             const positions = this.dropLine.geometry.attributes.position.array;
             positions[0] = currentPos.x;
-            positions[1] = 0.2;
+            positions[1] = lineBottomY;
             positions[2] = currentPos.z;
 
             positions[3] = currentPos.x;
