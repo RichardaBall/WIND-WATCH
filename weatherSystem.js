@@ -200,14 +200,15 @@ export class WeatherSystem {
         const positions = this.geometry.attributes.position.array;
         const camPos = this.camera.position;
         const isSnow = this.targetWeather === 'SNOW' || this.targetWeather === 'SNOW_FOG';
+        const currentTime = performance.now() * 0.001;
 
         for (let i = 0; i < this.particleCount; i++) {
             let idx = i * 3;
 
             if (isSnow) {
-                positions[idx] += (this.windForce.x + Math.sin(Date.now() * 0.002 + i) * 1.5) * delta;
+                positions[idx] += (this.windForce.x + Math.sin(currentTime * 2.0 + i) * 1.5) * delta;
                 positions[idx + 1] += (-12.0) * delta;
-                positions[idx + 2] += (this.windForce.z + Math.cos(Date.now() * 0.002 + i) * 1.5) * delta;
+                positions[idx + 2] += (this.windForce.z + Math.cos(currentTime * 2.0 + i) * 1.5) * delta;
             } else {
                 positions[idx] += this.windForce.x * delta;
                 positions[idx + 1] += this.targetWeather === 'STORM' ? -110 * delta : -80 * delta;

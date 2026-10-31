@@ -1,4 +1,3 @@
-// settings.js
 import * as THREE from 'three';
 
 export function setupSettings(dayNightCycle, player, weatherSystem, missionManager, helicopterSystems, cloudSystem) {
@@ -19,7 +18,7 @@ export function setupSettings(dayNightCycle, player, weatherSystem, missionManag
     `;
 
     const tutorialImg = document.createElement('img');
-    tutorialImg.src = 'tutorial.png';
+    tutorialImg.src = 'tutorial.webp';
     tutorialImg.style.cssText = `
         max-width: 90vw;
         max-height: 90vh;

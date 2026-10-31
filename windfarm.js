@@ -1,4 +1,3 @@
-// windfarm.js
 import * as THREE from 'three';
 
 export class WindFarm {
@@ -54,7 +53,7 @@ export class WindFarm {
             side: THREE.DoubleSide
         });
 
-        this.loadTransparentTexture('WTG.png', (texture) => {
+        this.loadTransparentTexture('WTG.webp', (texture) => {
             this.bodyMaterial.map = texture;
             this.bodyMaterial.needsUpdate = true;
         });
@@ -340,10 +339,9 @@ export class WindFarm {
 
     update(delta, cameraQuaternion) {
         const camPos = this.camera ? this.camera.position : null;
+        const elapsedTime = performance.now() * 0.001;
 
         for (const turbine of this.turbines) {
-            const elapsedTime = Date.now() * 0.001;
-
             let distSq = 0;
             if (camPos) {
                 const dx = turbine.group.position.x - camPos.x;

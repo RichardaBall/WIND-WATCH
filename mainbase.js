@@ -20,7 +20,7 @@ export class MainBase {
         this.texWidth = 512;
         this.texHeight = 512;
 
-        this.loadTextureWithPixelData('mainbase.png', (tex, data, w, h) => {
+        this.loadTextureWithPixelData('mainbase.webp', (tex, data, w, h) => {
             this.baseTexture = tex;
             this.basePixelData = data;
             this.texWidth = w;
@@ -31,12 +31,12 @@ export class MainBase {
             }
         });
 
-        this.loadTextureWithPixelData('mainbase_snow.png', (tex, data, w, h) => {
+        this.loadTextureWithPixelData('mainbase_snow.webp', (tex, data, w, h) => {
             this.snowTexture = tex;
             this.snowPixelData = data;
         });
 
-        this.loadTextureWithPixelData('mainbase_rain.png', (tex, data, w, h) => {
+        this.loadTextureWithPixelData('mainbase_rain.webp', (tex, data, w, h) => {
             this.rainTexture = tex;
             this.rainPixelData = data;
         });

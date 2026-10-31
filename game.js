@@ -90,93 +90,81 @@ export class Game {
 
     spawnRemotePlayer(id, data) {
         if (!data) return;
-        const remoteHeli = new HelicopterPlayer(this.scene);
-        const remotePlayerRef = { gearDown: data.gearDown ?? true };
-        const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
-        const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
+        
+        // Create a temporary placeholder entry immediately to prevent duplicate requests
+        this.remotePlayers[id] = { isInitializing: true };
 
-        const remoteAudio = this.player.audioManager.createRemoteRotorSource();
+        // Defer heavy geometry/material instantiation to the next animation frame to prevent frame-rate hangups
+        requestAnimationFrame(() => {
+            if (!this.networkManager || !this.remotePlayers[id]?.isInitializing) return;
 
-        const shadowCanvas = document.createElement('canvas');
-        shadowCanvas.width = 64;
-        shadowCanvas.height = 64;
-        const sCtx = shadowCanvas.getContext('2d');
-        const sGrad = sCtx.createRadialGradient(32, 32, 0, 32, 32, 32);
-        sGrad.addColorStop(0, 'rgba(0, 0, 0, 0.35)');
-        sGrad.addColorStop(0.5, 'rgba(0, 0, 0, 0.15)');
-        sGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-        sCtx.fillStyle = sGrad;
-        sCtx.fillRect(0, 0, 64, 64);
+            const remoteHeli = new HelicopterPlayer(this.scene);
+            const remotePlayerRef = { gearDown: data.gearDown ?? true };
+            const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
+            const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
 
-        const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
-        const shadowGeo = new THREE.PlaneGeometry(10, 10);
-        const shadowMat = new THREE.MeshBasicMaterial({
-            map: shadowTexture,
-            transparent: true,
-            depthWrite: false,
-            depthTest: false
+            const remoteAudio = this.player.audioManager.createRemoteRotorSource();
+
+            const shadowGeo = new THREE.PlaneGeometry(10, 10);
+            const shadowMat = new THREE.MeshBasicMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0.35,
+                depthWrite: false,
+                depthTest: false
+            });
+            const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+            shadowMesh.rotation.x = -Math.PI / 2;
+            shadowMesh.position.set(data.x || 0, 0.2, data.z || 0);
+            this.scene.add(shadowMesh);
+
+            const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
+            searchLight.position.set(0, -0.5, 0);
+            remoteHeli.group.add(searchLight);
+
+            const searchLightTarget = new THREE.Object3D();
+            this.scene.add(searchLightTarget);
+            searchLight.target = searchLightTarget;
+
+            // Lowered segment count from 32 to 16 for better rendering performance
+            const discGeo = new THREE.CircleGeometry(6.0, 16);
+            discGeo.rotateX(-Math.PI / 2);
+            
+            const discMat = new THREE.MeshBasicMaterial({
+                color: 0xe6f0ff,
+                transparent: true,
+                blending: THREE.NormalBlending,
+                depthWrite: false,
+                opacity: 0.0
+            });
+            const lightPoolMesh = new THREE.Mesh(discGeo, discMat);
+            lightPoolMesh.position.set(0, 0.05, 0);
+            this.scene.add(lightPoolMesh);
+
+            this.remotePlayers[id] = {
+                group: remoteHeli.group,
+                helicopter: remoteHeli,
+                waterSystem: remoteWaterSystem,
+                winchSystem: remoteWinchSystem,
+                playerRef: remotePlayerRef,
+                remoteAudio: remoteAudio,
+                searchLight: searchLight,
+                searchLightTarget: searchLightTarget,
+                lightPoolMesh: lightPoolMesh,
+                shadowMesh: shadowMesh,
+                targetPos: new THREE.Vector3(data.x || 0, data.y || 0, data.z || 0),
+                targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
+                targetFrame: data.currentFrame || 5,
+                rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
+                gearDown: data.gearDown ?? true,
+                winchState: data.winchState || 'STOWED',
+                isDroppingWater: data.isDroppingWater || false,
+                searchLightState: data.searchLightState || 'OFF',
+                targetSearchLightPos: new THREE.Vector3()
+            };
+
+            this.navRadar.addOrUpdateMarker(`remote_${id}`, remoteHeli, '#22c55e', 'PLAYER');
         });
-        const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
-        shadowMesh.rotation.x = -Math.PI / 2;
-        shadowMesh.position.set(data.x || 0, 0.2, data.z || 0);
-        this.scene.add(shadowMesh);
-
-        const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
-        searchLight.position.set(0, -0.5, 0);
-        remoteHeli.group.add(searchLight);
-
-        const searchLightTarget = new THREE.Object3D();
-        this.scene.add(searchLightTarget);
-        searchLight.target = searchLightTarget;
-
-        const discGeo = new THREE.CircleGeometry(6.0, 32);
-        discGeo.rotateX(-Math.PI / 2);
-        const canvas = document.createElement('canvas');
-        canvas.width = 128;
-        canvas.height = 128;
-        const ctx = canvas.getContext('2d');
-        const gradient = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
-        gradient.addColorStop(0.6, 'rgba(230, 240, 255, 0.7)');
-        gradient.addColorStop(1, 'rgba(200, 220, 255, 0)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, 128, 128);
-
-        const texture = new THREE.CanvasTexture(canvas);
-        const discMat = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            blending: THREE.NormalBlending,
-            depthWrite: false,
-            opacity: 0.0
-        });
-        const lightPoolMesh = new THREE.Mesh(discGeo, discMat);
-        lightPoolMesh.position.set(0, 0.05, 0);
-        this.scene.add(lightPoolMesh);
-
-        this.remotePlayers[id] = {
-            group: remoteHeli.group,
-            helicopter: remoteHeli,
-            waterSystem: remoteWaterSystem,
-            winchSystem: remoteWinchSystem,
-            playerRef: remotePlayerRef,
-            remoteAudio: remoteAudio,
-            searchLight: searchLight,
-            searchLightTarget: searchLightTarget,
-            lightPoolMesh: lightPoolMesh,
-            shadowMesh: shadowMesh,
-            targetPos: new THREE.Vector3(data.x || 0, data.y || 0, data.z || 0),
-            targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
-            targetFrame: data.currentFrame || 5,
-            rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
-            gearDown: data.gearDown ?? true,
-            winchState: data.winchState || 'STOWED',
-            isDroppingWater: data.isDroppingWater || false,
-            searchLightState: data.searchLightState || 'OFF',
-            targetSearchLightPos: new THREE.Vector3()
-        };
-
-        this.navRadar.addOrUpdateMarker(`remote_${id}`, remoteHeli, '#22c55e', 'PLAYER');
     }
 
     initNetworkCallbacks() {
@@ -229,7 +217,7 @@ export class Game {
         });
 
         this.networkManager.on('remote-player-update', (data) => {
-            if (data && data.id && this.remotePlayers[data.id]) {
+            if (data && data.id && this.remotePlayers[data.id] && !this.remotePlayers[data.id].isInitializing) {
                 const rp = this.remotePlayers[data.id];
                 if (data.x !== undefined && data.y !== undefined && data.z !== undefined) {
                     rp.targetPos.set(data.x, data.y, data.z);
@@ -276,27 +264,29 @@ export class Game {
         this.networkManager.on('player-disconnected', (id) => {
             if (id && this.remotePlayers[id]) {
                 const rp = this.remotePlayers[id];
-                if (rp.remoteAudio && this.player && this.player.audioManager) {
-                    this.player.audioManager.stopRemoteRotor(rp.remoteAudio);
-                }
+                if (!rp.isInitializing) {
+                    if (rp.remoteAudio && this.player && this.player.audioManager) {
+                        this.player.audioManager.stopRemoteRotor(rp.remoteAudio);
+                    }
 
-                if (rp.group) this.scene.remove(rp.group);
-                if (rp.shadowMesh) this.scene.remove(rp.shadowMesh);
-                if (rp.winchSystem && rp.winchSystem.cableLine) {
-                    this.scene.remove(rp.winchSystem.cableLine);
-                    this.scene.remove(rp.winchSystem.hookMesh);
-                    this.scene.remove(rp.winchSystem.rotorWashSystem);
-                }
-                if (rp.waterSystem && rp.waterSystem.particleSystem) {
-                    this.scene.remove(rp.waterSystem.particleSystem);
-                    this.scene.remove(rp.waterSystem.splashSystem);
-                }
-                if (rp.searchLight) this.scene.remove(rp.searchLight);
-                if (rp.searchLightTarget) this.scene.remove(rp.searchLightTarget);
-                if (rp.lightPoolMesh) this.scene.remove(rp.lightPoolMesh);
-                
-                if (this.navRadar) {
-                    this.navRadar.removeMarker(`remote_${id}`);
+                    if (rp.group) this.scene.remove(rp.group);
+                    if (rp.shadowMesh) this.scene.remove(rp.shadowMesh);
+                    if (rp.winchSystem && rp.winchSystem.cableLine) {
+                        this.scene.remove(rp.winchSystem.cableLine);
+                        this.scene.remove(rp.winchSystem.hookMesh);
+                        this.scene.remove(rp.winchSystem.rotorWashSystem);
+                    }
+                    if (rp.waterSystem && rp.waterSystem.particleSystem) {
+                        this.scene.remove(rp.waterSystem.particleSystem);
+                        this.scene.remove(rp.waterSystem.splashSystem);
+                    }
+                    if (rp.searchLight) this.scene.remove(rp.searchLight);
+                    if (rp.searchLightTarget) this.scene.remove(rp.searchLightTarget);
+                    if (rp.lightPoolMesh) this.scene.remove(rp.lightPoolMesh);
+                    
+                    if (this.navRadar) {
+                        this.navRadar.removeMarker(`remote_${id}`);
+                    }
                 }
                 delete this.remotePlayers[id];
             }
@@ -396,7 +386,7 @@ export class Game {
 
         for (const id in this.remotePlayers) {
             const rp = this.remotePlayers[id];
-            if (!rp || !rp.group || !rp.targetPos) continue;
+            if (!rp || rp.isInitializing || !rp.group || !rp.targetPos) continue;
 
             rp.group.position.lerp(rp.targetPos, delta * 10.0);
             if (rp.helicopter && rp.helicopter.mesh && rp.targetQuaternion) {
