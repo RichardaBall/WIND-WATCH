@@ -201,10 +201,90 @@ export class MainBase {
         };
 
         this.allLights = [];
+        this.markerGeometry = new THREE.SphereGeometry(1, 16, 16);
+        this.glowGeometry = new THREE.PlaneGeometry(1, 1);
+        this.glowTexture = this.createGlowTexture();
+        this.glowSize = 6.0;
+        this.glowStrength = 0.9;
         this.buildLightGroup('green', 0x00ff66);
         this.buildLightGroup('red', 0xff0033);
         this.buildLightGroup('amber', 0xffaa00);
         this.buildLightGroup('white', 0xffffff);
+
+        // The steady lamps are baked into a light map instead of being real PointLights (see buildNightLightMap)
+        this.lightMapScale = 3.0;
+        this.material.lightMap = this.buildNightLightMap(72, 15);
+        this.material.lightMapIntensity = 0.0;
+        this.material.needsUpdate = true;
+    }
+
+    // Bakes the night-time light pools of the steady base lamps into one texture, using the same falloff
+    // three.js applies to a PointLight (range 15, decay 2, lamp height pos.z above the base plane).
+    // Each real PointLight had to be evaluated per pixel by every lit material in the scene;
+    // the light map costs one texture lookup on the base only.
+    buildNightLightMap(baseSize, range) {
+        const size = 512;
+        const halfSize = baseSize / 2;
+        const pxPerUnit = size / baseSize;
+        const accum = new Float32Array(size * size * 3);
+
+        this.allLights.forEach(item => {
+            if (item.config.flashing) return;
+            const color = item.marker.material.color;
+            const height = item.config.z !== undefined ? item.config.z : 0.2;
+            const cx = (item.config.x + halfSize) * pxPerUnit;
+            const cy = (halfSize - item.config.y) * pxPerUnit;
+            const rPx = range * pxPerUnit;
+            const x0 = Math.max(0, Math.floor(cx - rPx));
+            const x1 = Math.min(size - 1, Math.ceil(cx + rPx));
+            const y0 = Math.max(0, Math.floor(cy - rPx));
+            const y1 = Math.min(size - 1, Math.ceil(cy + rPx));
+
+            for (let py = y0; py <= y1; py++) {
+                for (let px = x0; px <= x1; px++) {
+                    const dx = (px + 0.5 - cx) / pxPerUnit;
+                    const dy = (py + 0.5 - cy) / pxPerUnit;
+                    const distSq = dx * dx + dy * dy + height * height;
+                    const dist = Math.sqrt(distSq);
+                    if (dist >= range) continue;
+                    const cutoff = Math.pow(Math.max(0, 1 - Math.pow(dist / range, 4)), 2);
+                    const irradiance = (height / dist) / distSq * cutoff;
+                    const i = (py * size + px) * 3;
+                    accum[i] += color.r * irradiance;
+                    accum[i + 1] += color.g * irradiance;
+                    accum[i + 2] += color.b * irradiance;
+                }
+            }
+        });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(size, size);
+        for (let p = 0; p < size * size; p++) {
+            imgData.data[p * 4] = accum[p * 3] * this.lightMapScale * 255;
+            imgData.data[p * 4 + 1] = accum[p * 3 + 1] * this.lightMapScale * 255;
+            imgData.data[p * 4 + 2] = accum[p * 3 + 2] * this.lightMapScale * 255;
+            imgData.data[p * 4 + 3] = 255;
+        }
+        ctx.putImageData(imgData, 0, 0);
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    createGlowTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        grad.addColorStop(0.25, 'rgba(255, 255, 255, 0.45)');
+        grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.12)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+        return new THREE.CanvasTexture(canvas);
     }
 
     loadTextureWithPixelData(url, callback) {
@@ -274,26 +354,37 @@ export class MainBase {
         if (!this.lightConfigs[category]) return;
         this.lightConfigs[category].forEach((pos, idx) => {
             const zVal = pos.z !== undefined ? pos.z : 0.2;
-            const markerGeo = new THREE.SphereGeometry(1, 16, 16);
-            const markerMat = new THREE.MeshBasicMaterial({ 
-                color: colorHex, 
-                depthTest: true, 
-                depthWrite: true 
+            const markerMat = new THREE.MeshBasicMaterial({
+                color: colorHex,
+                depthTest: true,
+                depthWrite: true
             });
-            const marker = new THREE.Mesh(markerGeo, markerMat);
+            const marker = new THREE.Mesh(this.markerGeometry, markerMat);
             marker.renderOrder = 1;
             marker.position.set(pos.x, pos.y, zVal);
             marker.scale.set(pos.scale, pos.scale, pos.scale);
             this.group.add(marker);
 
-            const pointLight = new THREE.PointLight(colorHex, 0.0, 15);
-            pointLight.position.set(pos.x, pos.y, zVal);
-            this.group.add(pointLight);
-
-            const lightObj = { category, index: idx, marker, pointLight, config: pos };
+            const lightObj = { category, index: idx, marker, config: pos };
             if (pos.flashing) {
                 lightObj.flashTimer = Math.random() * (pos.flashInterval || 0.5);
                 lightObj.flashState = true;
+
+                // A flashing lamp cannot live in the static light map, so it gets an additive glow sprite
+                const glowMat = new THREE.MeshBasicMaterial({
+                    color: colorHex,
+                    map: this.glowTexture,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    opacity: 0.0
+                });
+                lightObj.glow = new THREE.Mesh(this.glowGeometry, glowMat);
+                lightObj.glow.renderOrder = 1;
+                lightObj.glow.position.set(pos.x, pos.y, zVal - 0.5);
+                lightObj.glow.scale.set(this.glowSize, this.glowSize, 1);
+                lightObj.glow.visible = false;
+                this.group.add(lightObj.glow);
             }
             this.allLights.push(lightObj);
         });
@@ -383,7 +474,9 @@ export class MainBase {
         this.foamGeometry.setDrawRange(0, particleIdx);
         this.foamGeometry.attributes.position.needsUpdate = true;
 
-        const intensityMultiplier = nightFactor * 3.0;
+        // Old PointLight intensity was nightFactor * 3.0; 3.5 makes up for the specular shine a light map cannot give.
+        // The bake is stored pre-multiplied by lightMapScale.
+        this.material.lightMapIntensity = nightFactor * 3.5 / this.lightMapScale;
         this.allLights.forEach(item => {
             if (item.config.flashing) {
                 item.flashTimer += delta;
@@ -393,10 +486,9 @@ export class MainBase {
                     item.flashTimer = 0;
                 }
                 const active = item.flashState && nightFactor > 0.1;
-                item.pointLight.intensity = active ? intensityMultiplier * 1.5 : 0;
+                item.glow.material.opacity = nightFactor * this.glowStrength;
+                item.glow.visible = active;
                 item.marker.visible = item.flashState;
-            } else {
-                item.pointLight.intensity = intensityMultiplier;
             }
         });
 

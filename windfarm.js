@@ -53,6 +53,10 @@ export class WindFarm {
             side: THREE.DoubleSide
         });
 
+        this.markerGeometry = new THREE.SphereGeometry(1, 16, 16);
+        this.glowGeometry = new THREE.PlaneGeometry(1, 1);
+        this.glowTexture = this.createGlowTexture();
+
         this.loadTransparentTexture('WTG.webp', (texture) => {
             this.bodyMaterial.map = texture;
             this.bodyMaterial.needsUpdate = true;
@@ -138,6 +142,38 @@ export class WindFarm {
         return new THREE.CanvasTexture(canvas);
     }
 
+    createGlowTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        grad.addColorStop(0.25, 'rgba(255, 255, 255, 0.45)');
+        grad.addColorStop(0.6, 'rgba(255, 255, 255, 0.12)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    createGlowMesh(colorHex, size, opacity) {
+        // Additive glow sprite instead of a PointLight: no per-pixel lighting cost for every lit material
+        const material = new THREE.MeshBasicMaterial({
+            color: colorHex,
+            map: this.glowTexture,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            opacity: opacity
+        });
+        const glow = new THREE.Mesh(this.glowGeometry, material);
+        glow.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
+        glow.scale.set(size, size, 1);
+        glow.visible = opacity > 0.01;
+        return glow;
+    }
+
     createTurbine(x, z, initialFireState = false) {
         const turbineGroup = new THREE.Group();
         turbineGroup.position.set(x, 0, z);
@@ -212,16 +248,14 @@ export class WindFarm {
         foamParticleSystem.rotation.z = THREE.MathUtils.degToRad(this.foamConfig.rotZ);
         turbineGroup.add(foamParticleSystem);
 
-        const markerGeo = new THREE.SphereGeometry(1, 16, 16);
         const markerMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-        const lightMarker = new THREE.Mesh(markerGeo, markerMat);
+        const lightMarker = new THREE.Mesh(this.markerGeometry, markerMat);
         lightMarker.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
         lightMarker.scale.set(this.lightConfig.scale, this.lightConfig.scale, this.lightConfig.scale);
         turbineGroup.add(lightMarker);
 
-        const pointLight = new THREE.PointLight(0xff0033, 1.5, 15);
-        pointLight.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
-        turbineGroup.add(pointLight);
+        const aviationGlow = this.createGlowMesh(0xff0033, 5.0, 0.5);
+        turbineGroup.add(aviationGlow);
 
         const sparkCount = 100;
         const sparkGeometry = new THREE.BufferGeometry();
@@ -285,9 +319,8 @@ export class WindFarm {
         stackSystem.frustumCulled = false;
         turbineGroup.add(stackSystem);
 
-        const sparkLight = new THREE.PointLight(0x00aaff, initialFireState ? 5.0 : 0.0, 20);
-        sparkLight.position.set(this.lightConfig.x, this.lightConfig.y, this.lightConfig.z);
-        turbineGroup.add(sparkLight);
+        const sparkGlow = this.createGlowMesh(0x00aaff, 16.0, initialFireState ? 0.6 : 0.0);
+        turbineGroup.add(sparkGlow);
 
         this.group.add(turbineGroup);
 
@@ -300,7 +333,7 @@ export class WindFarm {
             foamAngles: foamAngles,
             foamOffsets: foamOffsets,
             foamParticleSystem: foamParticleSystem,
-            pointLight: pointLight,
+            aviationGlow: aviationGlow,
             sparkSystem: sparkSystem,
             sparkMaterial: sparkMaterial,
             sparkVelocities: sparkVelocities,
@@ -308,7 +341,7 @@ export class WindFarm {
             stackSystem: stackSystem,
             stackMaterial: stackMaterial,
             stackOffsets: stackOffsets,
-            sparkLight: sparkLight,
+            sparkGlow: sparkGlow,
             isSparking: initialFireState
         });
     }
@@ -319,7 +352,8 @@ export class WindFarm {
             turbine.isSparking = sparking;
             turbine.sparkMaterial.opacity = sparking ? 0.9 : 0.0;
             turbine.stackMaterial.opacity = sparking ? 0.6 : 0.0;
-            turbine.sparkLight.intensity = sparking ? 5.0 : 0.0;
+            turbine.sparkGlow.material.opacity = sparking ? 0.6 : 0.0;
+            turbine.sparkGlow.visible = sparking;
         }
     }
 
@@ -382,7 +416,8 @@ export class WindFarm {
             if (turbine.isSparking && isVisibleDist) {
                 turbine.sparkSystem.visible = true;
                 turbine.stackSystem.visible = true;
-                turbine.sparkLight.intensity = Math.random() > 0.3 ? 6.0 : 0.5;
+                turbine.sparkGlow.visible = true;
+                turbine.sparkGlow.material.opacity = Math.random() > 0.3 ? 0.7 : 0.1;
 
                 const sparkPos = turbine.sparkSystem.geometry.attributes.position.array;
                 for (let i = 0; i < turbine.sparkLifetimes.length; i++) {
@@ -426,7 +461,7 @@ export class WindFarm {
             } else if (turbine.isSparking) {
                 turbine.sparkSystem.visible = false;
                 turbine.stackSystem.visible = false;
-                turbine.sparkLight.intensity = 0.0;
+                turbine.sparkGlow.visible = false;
             }
 
             if (cameraQuaternion) {
