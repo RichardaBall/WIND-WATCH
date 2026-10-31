@@ -2,6 +2,18 @@ import * as THREE from 'three';
 import { AudioManager } from './audioManager.js';
 import { crash } from './crash.js';
 
+// Sprite sheets are loaded once and shared by every helicopter (local and remote).
+// Each helicopter gets its own clone so it can show its own frame; clones share the decoded image and GPU upload.
+const sharedSheets = {};
+function loadSharedSheet(url, onLoad, onError = () => {}) {
+    if (!sharedSheets[url]) {
+        sharedSheets[url] = new Promise((resolve, reject) => {
+            new THREE.TextureLoader().load(url, resolve, undefined, reject);
+        });
+    }
+    sharedSheets[url].then((tex) => onLoad(tex.clone()), onError);
+}
+
 export default class HelicopterPlayer {
     constructor(scene) {
         this.scene = scene;
@@ -14,7 +26,6 @@ export default class HelicopterPlayer {
         this._scratchVector2D_3 = new THREE.Vector2();
         this._scratchVector2D_moveDir = new THREE.Vector2();
 
-        const textureLoader = new THREE.TextureLoader();
         this.totalFrames = 16;
 
         const geometry = new THREE.PlaneGeometry(24, 24);
@@ -117,7 +128,7 @@ export default class HelicopterPlayer {
         // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6 (2 * 22.5° + 4 * 22.5° = 135°)
         this.currentFrame = 6;
 
-        textureLoader.load('helicopter_gear.png', (tex) => {
+        loadSharedSheet('helicopter_gear.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
             tex.magFilter = THREE.LinearFilter;
@@ -133,7 +144,7 @@ export default class HelicopterPlayer {
             }
         });
 
-        textureLoader.load('helicopter.png', (tex) => {
+        loadSharedSheet('helicopter.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
             tex.magFilter = THREE.LinearFilter;
@@ -145,7 +156,7 @@ export default class HelicopterPlayer {
             this.gearUpTex = tex; 
         });
 
-        textureLoader.load('helicopter_emissive.png', (tex) => {
+        loadSharedSheet('helicopter_emissive.png', (tex) => {
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
             tex.magFilter = THREE.LinearFilter;
@@ -157,7 +168,7 @@ export default class HelicopterPlayer {
             this.emissiveTex = tex;
             this.material.emissiveMap = tex;
             this.material.needsUpdate = true;
-        }, undefined, () => {});
+        }, () => {});
 
         this.group.position.set(8.41, 19.81, -6.54);
         this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
