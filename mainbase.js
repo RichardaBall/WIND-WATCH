@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BASE_HELIPADS } from './helipads.js';
 
 export class MainBase {
     constructor(scene, camera, renderer) {
@@ -65,13 +66,11 @@ export class MainBase {
             visible: false
         });
 
-        const pad1Mesh = new THREE.Mesh(padBoxGeo, padBoxMat);
-        pad1Mesh.position.set(8.41, (19.81 - 20) + (boxHeight / 2), -6.54);
-        this.group.add(pad1Mesh);
-
-        const pad2Mesh = new THREE.Mesh(padBoxGeo, padBoxMat);
-        pad2Mesh.position.set(-10.28, (27.29 - 20) + (boxHeight / 2), 3.74);
-        this.group.add(pad2Mesh);
+        for (const pad of BASE_HELIPADS) {
+            const padMesh = new THREE.Mesh(padBoxGeo, padBoxMat);
+            padMesh.position.set(pad.x, (pad.y - 20) + (boxHeight / 2), pad.z);
+            this.group.add(padMesh);
+        }
 
         this.foamParams = {
             particlesCount: 1200,

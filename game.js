@@ -20,6 +20,7 @@ import { WaterSystem } from './waterSystem.js';
 import { WinchSystem } from './winchSystem.js';
 import { NetworkManager } from './networkManager.js';
 import { FpsCounter } from './fpsCounter.js';
+import { BASE_HELIPADS } from './helipads.js';
 
 export class Game {
     constructor() {
@@ -55,7 +56,7 @@ export class Game {
 
         this.player = new HelicopterPlayer(scene);
 
-        const defaultSpawnPos = new THREE.Vector3(8.41, 19.81, -6.54);
+        const defaultSpawnPos = BASE_HELIPADS[0];
 
         this.player.group.position.copy(defaultSpawnPos);
         this.player.targetPosition.copy(defaultSpawnPos);
@@ -173,13 +174,8 @@ export class Game {
                 }
             }
 
-            const helipads = [
-                new THREE.Vector3(8.41, 19.81, -6.54),
-                new THREE.Vector3(-10.28, 27.29, 3.74)
-            ];
-
-            let chosenPad = helipads[0];
-            for (const pad of helipads) {
+            let chosenPad = BASE_HELIPADS[0];
+            for (const pad of BASE_HELIPADS) {
                 let occupied = false;
                 for (const id in players) {
                     if (id !== socketId && players[id]) {

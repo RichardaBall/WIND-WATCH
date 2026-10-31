@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AudioManager } from './audioManager.js';
 import { crash } from './crash.js';
+import { BASE_HELIPADS } from './helipads.js';
 
 // Sprite sheets are loaded once and shared by every helicopter (local and remote).
 // Each helicopter gets its own clone so it can show its own frame; clones share the decoded image and GPU upload.
@@ -137,10 +138,7 @@ export default class HelicopterPlayer {
         // Landing aid: near a helipad the drop line ends on the pad surface (not at sea level, which in this
         // view sits far from the pad) and a ring marks the touchdown point. Colour says what pressing E does now:
         // green = lands on the pad, amber = inside the landing zone but gear is up, white = not inside yet.
-        this.landingPads = [
-            new THREE.Vector3(8.41, 19.81, -6.54),
-            new THREE.Vector3(-10.28, 27.29, 3.74)
-        ];
+        this.landingPads = [...BASE_HELIPADS];
         this.landingZoneHalfSize = 6.0; // Same zone shutdownEngine() checks
         this.landingAidRange = 20.0;
         this.landingRingHideHeight = 10.0; // Ring disappears when closer than this above the pad
@@ -204,8 +202,8 @@ export default class HelicopterPlayer {
             this.material.needsUpdate = true;
         }, () => {});
 
-        this.group.position.set(8.41, 19.81, -6.54);
-        this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
+        this.group.position.copy(BASE_HELIPADS[0]);
+        this.targetPosition = BASE_HELIPADS[0].clone();
         this.maxSpeed = 37.5;
         this.currentSpeed = 0;
         this.isMoving = false;
@@ -220,7 +218,7 @@ export default class HelicopterPlayer {
         this.loadSpeedLoss = 0.1;      // top speed lost per extra helicopter-weight (15% at full load)
 
         this.engineState = 'OFF'; 
-        this.targetAltitude = 19.81;  
+        this.targetAltitude = BASE_HELIPADS[0].y;
         this.verticalVelocity = 0;
 
         this.audioManager = options.audioManager || new AudioManager();
@@ -276,9 +274,9 @@ export default class HelicopterPlayer {
             this.material.emissiveMap.offset.x = 6 * (1 / this.totalFrames);
             this.material.needsUpdate = true;
         }
-        this.group.position.set(8.41, 19.81, -6.54);
-        this.targetPosition.set(8.41, 19.81, -6.54);
-        this.targetAltitude = 19.81;
+        this.group.position.copy(BASE_HELIPADS[0]);
+        this.targetPosition.copy(BASE_HELIPADS[0]);
+        this.targetAltitude = BASE_HELIPADS[0].y;
         this.isMoving = false;
         this.rotorSpeed = 0;
         this.searchLight.intensity = 0;
@@ -340,35 +338,31 @@ export default class HelicopterPlayer {
     }
 
     isInside3DBox(pos) {
-        const pad1X = 8.41, pad1Z = -6.54, pad1Y = 19.81;
-        const pad2X = -10.28, pad2Z = 3.74, pad2Y = 27.29;
-        const halfSize = 4.0; 
+        const halfSize = 4.0;
         const boxHeight = 6.0;
 
-        const inPad1 = Math.abs(pos.x - pad1X) <= halfSize && Math.abs(pos.z - pad1Z) <= halfSize && pos.y >= pad1Y && pos.y <= pad1Y + boxHeight;
-        const inPad2 = Math.abs(pos.x - pad2X) <= halfSize && Math.abs(pos.z - pad2Z) <= halfSize && pos.y >= pad2Y && pos.y <= pad2Y + boxHeight;
-        
-        return { inPad1, inPad2, isInside: inPad1 || inPad2 };
+        for (const pad of this.landingPads) {
+            if (Math.abs(pos.x - pad.x) <= halfSize && Math.abs(pos.z - pad.z) <= halfSize && pos.y >= pad.y && pos.y <= pad.y + boxHeight) {
+                return { isInside: true, pad };
+            }
+        }
+        return { isInside: false, pad: null };
     }
 
     shutdownEngine() {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
 
-        const pad1X = 8.41, pad1Z = -6.54;
-        const pad2X = -10.28, pad2Z = 3.74;
-        const halfSize = 6.0; 
-        const pos2D = this._scratchVector2D_1.set(this.group.position.x, this.group.position.z);
-
-        const inPad1 = Math.abs(pos2D.x - pad1X) <= halfSize && Math.abs(pos2D.y - pad1Z) <= halfSize;
-        const inPad2 = Math.abs(pos2D.x - pad2X) <= halfSize && Math.abs(pos2D.y - pad2Z) <= halfSize;
+        const halfSize = this.landingZoneHalfSize;
+        const pos = this.group.position;
+        const zonePad = this.landingPads.find(pad => Math.abs(pos.x - pad.x) <= halfSize && Math.abs(pos.z - pad.z) <= halfSize);
 
         this.engineState = 'SHUTTING_DOWN';
         this.isMoving = false;
         this.currentSpeed = 0;
 
-        if ((inPad1 || inPad2) && this.gearDown) {
-            this.landingPadTarget = inPad1 ? new THREE.Vector3(pad1X, 19.81, pad1Z) : new THREE.Vector3(pad2X, 27.29, pad2Z);
-            this.targetAltitude = 45.0; 
+        if (zonePad && this.gearDown) {
+            this.landingPadTarget = zonePad;
+            this.targetAltitude = 45.0;
         } else {
             this.landingPadTarget = null;
             this.targetAltitude = 0.0;
@@ -464,7 +458,7 @@ export default class HelicopterPlayer {
         this.searchLight.intensity = (this.engineState === 'RUNNING') ? Math.max(40.0, nightFactor * 150.0) : 0.0;
 
         const pos = this.group.position;
-        const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
+        const { isInside } = this.isInside3DBox(pos);
         const pos2D = this._scratchVector2D_1.set(pos.x, pos.z);
         const isOverOcean = pos2D.length() > 55.0;
 
