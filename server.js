@@ -19,8 +19,29 @@ const WTG_FIRE_STAGE = {
     FIRE_EXTINGUISHED: 'FIRE_EXTINGUISHED'
 };
 
+const SHIP_LANDING_STAGE = {
+    LAND_ON_SHIP: 'LAND_ON_SHIP',
+    LANDED: 'LANDED'
+};
+
+// Share of missions that are a ship landing instead of a turbine fire
+const SHIP_MISSION_CHANCE = 0.3;
+
 function generateRandomMission() {
     const missionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    if (Math.random() < SHIP_MISSION_CHANCE) {
+        // Land on the support ship's helideck. The ship's position comes from the clock on each client
+        return {
+            missionId,
+            type: 'SHIP_LANDING',
+            stage: SHIP_LANDING_STAGE.LAND_ON_SHIP,
+            missionStage: MISSION_STAGE.ACTIVE,
+            isCompleted: false,
+            progress: 0,
+            createdAt: Date.now()
+        };
+    }
+
     // Random water requirement between 25% (0.25) and 100% (1.0) of a full tank
     const requiredWaterFraction = 0.25 + Math.random() * 0.75;
     return {
@@ -53,6 +74,10 @@ function validateMissionCompletion(missionData) {
     if (missionData.type === 'WTG_FIRE') {
         return missionData.isExtinguished === true && missionData.progress >= 1.0;
     }
+    if (missionData.type === 'SHIP_LANDING') {
+        // The client reports the landing; trusted like the fire's extinguish message
+        return true;
+    }
     return false;
 }
 
@@ -68,7 +93,7 @@ function finishMission(reason, socket) {
     currentMission.completedAt = Date.now();
     currentMission.completedBy = socket ? socket.id : 'SERVER';
     currentMission.completionReason = reason;
-    currentMission.stage = WTG_FIRE_STAGE.FIRE_EXTINGUISHED;
+    currentMission.stage = currentMission.type === 'SHIP_LANDING' ? SHIP_LANDING_STAGE.LANDED : WTG_FIRE_STAGE.FIRE_EXTINGUISHED;
 
     broadcastMissionState();
     io.emit('mission-completed', {

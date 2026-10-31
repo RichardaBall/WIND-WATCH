@@ -18,7 +18,8 @@ export class MissionManager {
         this.lastMissionKey = null;
 
         this.availableMissions = {
-            'WTG_FIRE': (missionData) => this.createWtgFireMission(missionData)
+            'WTG_FIRE': (missionData) => this.createWtgFireMission(missionData),
+            'SHIP_LANDING': (missionData) => this.createShipLandingMission(missionData)
         };
 
         this.registerPermanentLandmarks();
@@ -139,6 +140,41 @@ export class MissionManager {
         };
     }
 
+    // Land on the support ship's helideck and shut the engine down. Its screen-edge arrow is red until then
+    createShipLandingMission(missionData) {
+        const ship = this.player && this.player.ship;
+        if (!ship) return null;
+
+        const alreadyCompleted = !!(missionData && missionData.isCompleted);
+        let finishedByServer = false;
+        // Only a landing made during this mission counts: already parked on the deck, take off and land again
+        const isParkedOnDeck = () => this.player.engineState === 'OFF' && this.player.restingPad === ship.deckPosition;
+        let hasLeftDeck = !isParkedOnDeck();
+
+        if (!alreadyCompleted && this.navRadar) {
+            this.navRadar.addOrUpdateMarker('ship', ship.group, '#e74c3c', 'LAND!');
+        }
+
+        return {
+            missionId: missionData && missionData.missionId,
+            missionComplete() {
+                finishedByServer = true;
+            },
+            update: () => {
+                if (finishedByServer || alreadyCompleted) return false;
+                const parked = isParkedOnDeck();
+                if (!parked) hasLeftDeck = true;
+                return hasLeftDeck && parked;
+            },
+            cleanup: () => {
+                // Back to the ship's normal amber arrow
+                if (this.navRadar) {
+                    this.navRadar.addOrUpdateMarker('ship', ship.group, '#f59e0b', 'SHIP');
+                }
+            }
+        };
+    }
+
     clearAllMissions() {
         if (this.currentMissionInstance && typeof this.currentMissionInstance.cleanup === 'function') {
             this.currentMissionInstance.cleanup();
@@ -163,7 +199,8 @@ export class MissionManager {
     spawnSpecificMission(type, missionData) {
         if (!missionData) return;
         
-        const missionType = 'WTG_FIRE';
+        // A mission type this client doesn't know falls back to a fire, as before
+        const missionType = this.availableMissions[missionData.type] ? missionData.type : 'WTG_FIRE';
 
         this.clearAllMissions();
         this.currentMissionKey = missionType;
@@ -186,12 +223,13 @@ export class MissionManager {
 
         if (state.missionId && this.currentMissionInstance && this.currentMissionInstance.missionId &&
             state.missionId !== this.currentMissionInstance.missionId) {
-            this.spawnSpecificMission('WTG_FIRE', state);
+            this.spawnSpecificMission(state.type, state);
             return;
         }
 
-        if (this.currentMissionKey !== 'WTG_FIRE' || !this.currentMissionInstance) {
-            this.spawnSpecificMission('WTG_FIRE', state);
+        const stateType = this.availableMissions[state.type] ? state.type : 'WTG_FIRE';
+        if (this.currentMissionKey !== stateType || !this.currentMissionInstance) {
+            this.spawnSpecificMission(state.type, state);
             return;
         }
 
