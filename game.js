@@ -84,6 +84,7 @@ export class Game {
 
         this.settings = setupSettings(this.dayNightCycle, this.player, this.weatherSystem, this.missionManager, this.helicopterSystems, this.cloudSystem);
         this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, this.searchLightSystem, this.dayNightCycle);
+        this.inputManager.ship = this.ship;
 
         this.networkManager = new NetworkManager();
         if (this.helicopterSystems.tools['WINCH']) {

@@ -223,6 +223,16 @@ export default class HelicopterPlayer {
         this.waterWeight = 1.2;        // full bucket, as a share of the empty helicopter
         this.loadSpeedLoss = 0.1;      // top speed lost per extra helicopter-weight (15% at full load)
 
+        // Landing on the moving ship: clicking it flies over its deck and keeps pace. The landing aid turns green
+        // (and E lands) once the ship's speed is matched over the deck, gear down, for shipMatchHold seconds
+        this.followPad = null;                 // ship deck being followed
+        this.followVelocity = new THREE.Vector2();
+        this.shipMatchTime = 0;
+        this.shipMatchHold = 3.0;              // seconds
+        this.shipMatchTolerance = 0.8;         // speed difference (units per second) that still counts as matched
+        this._lastPosition = this.group.position.clone();
+        this._scratchDeckVelocity = new THREE.Vector2();
+
         this.engineState = 'OFF'; 
         this.targetAltitude = BASE_HELIPADS[0].y;
         this.verticalVelocity = 0;
@@ -264,6 +274,8 @@ export default class HelicopterPlayer {
         this.currentSpeed = 0;
         this.landingPadTarget = null;
         this.restingPad = null;
+        this.followPad = null;
+        this.shipMatchTime = 0;
         this.isTakingOff = false;
 
         if (this.helicopterSystems) {
@@ -299,6 +311,7 @@ export default class HelicopterPlayer {
         this.engineState = 'CRASHED';
         if (this.landingMarker) this.landingMarker.visible = false;
         this.isMoving = false;
+        this.followPad = null;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
         this.searchLight.intensity = 0;
@@ -356,6 +369,13 @@ export default class HelicopterPlayer {
         return { isInside: false, pad: null };
     }
 
+    // Green on the landing aid, and E lands, only when this is true for the pad below.
+    // The ship's deck also needs the ship's speed matched and held (shipMatchHold)
+    isPadReady(pad) {
+        if (!this.gearDown) return false;
+        return !this.ship || pad !== this.ship.deckPosition || this.shipMatchTime >= this.shipMatchHold;
+    }
+
     shutdownEngine() {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
 
@@ -366,8 +386,9 @@ export default class HelicopterPlayer {
         this.engineState = 'SHUTTING_DOWN';
         this.isMoving = false;
         this.currentSpeed = 0;
+        this.followPad = null;
 
-        if (zonePad && this.gearDown) {
+        if (zonePad && this.isPadReady(zonePad)) {
             this.landingPadTarget = zonePad;
             this.targetAltitude = 45.0;
         } else {
@@ -415,13 +436,20 @@ export default class HelicopterPlayer {
         }
     }
 
-    setTarget(newPos) {
+    // followShip: newPos is the ship's deck, to be followed as it moves (see followPad)
+    setTarget(newPos, followShip = false) {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff || this.engineState === 'SHUTTING_DOWN') {
             return;
         }
         if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
             return;
         }
+
+        if (followShip && !this.followPad) {
+            // Start from the current velocity so following the ship doesn't jerk
+            this.followVelocity.copy(this.moveHeading).multiplyScalar(this.currentSpeed);
+        }
+        this.followPad = followShip && this.winchState === 'STOWED' ? newPos : null;
 
         this.targetPosition.copy(newPos);
         const clickPos2D = this._scratchVector2D_1.set(newPos.x, newPos.z);
@@ -637,7 +665,9 @@ export default class HelicopterPlayer {
             let lineBottomY = 0.2;
             if (nearPad && this.engineState !== 'OFF') {
                 const inZone = padDist <= this.landingZoneHalfSize;
-                const aidColor = inZone ? (this.gearDown ? 0x22c55e : 0xf59e0b) : 0xffffff;
+                // Stays green while coming down onto the pad it was green for
+                const ready = this.landingPadTarget === nearPad || this.isPadReady(nearPad);
+                const aidColor = inZone ? (ready ? 0x22c55e : 0xf59e0b) : 0xffffff;
                 lineBottomY = nearPad.y;
                 lineMat.color.setHex(aidColor);
                 lineMat.opacity = 0.95;
@@ -648,6 +678,10 @@ export default class HelicopterPlayer {
                     this.landingMarker.material.color.setHex(aidColor);
                     // Hide the ring in the last stretch above the pad (final descent, or just lifted off)
                     this.landingMarker.visible = currentPos.y - nearPad.y > this.landingRingHideHeight;
+                    // Over the ship the ring starts wide (outside the deck's painted circle) and closes in while the
+                    // speed match is held, then turns green
+                    const holding = inZone && this.gearDown && !ready;
+                    this.landingMarker.scale.setScalar(holding ? 3.0 - 2.0 * Math.min(1, this.shipMatchTime / this.shipMatchHold) : 1.0);
                 }
             } else {
                 lineMat.color.setHex(0xffffff);
@@ -670,7 +704,46 @@ export default class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+        if (this.followPad && (this.engineState !== 'RUNNING' || this.isTakingOff || this.winchState !== 'STOWED')) {
+            this.followPad = null;
+            this.isMoving = false;
+        }
+
+        if (this.followPad) {
+            // Keeping pace with the ship: aim for the ship's own velocity plus a closing speed towards the deck that
+            // shrinks as the gap closes, and change velocity no faster than the helicopter can accelerate
+            const load = this.getLoadFactor();
+            const accel = this.acceleration / load;
+            const loadedMaxSpeed = this.maxSpeed * (1.0 - this.loadSpeedLoss * (load - 1.0));
+            const maxSpeed = this.gearDown ? loadedMaxSpeed * 0.5 : loadedMaxSpeed;
+            const gapX = this.followPad.x - currentPos.x;
+            const gapZ = this.followPad.z - currentPos.z;
+            const gap = Math.hypot(gapX, gapZ);
+            const closing = Math.min(maxSpeed, Math.sqrt(2.0 * accel * 0.8 * gap), gap * 2.0);
+
+            // The deck's own speed, measured from how far it moved this frame: the ship runs on the wall clock, the
+            // helicopter on the frame clock (capped at 0.1 s), so the ship's nominal speed is off after a slow frame
+            const deckSpeed = this.shipDeckVelocity(delta);
+            const wanted = this._scratchVector2D_moveDir.set(deckSpeed.x, deckSpeed.y);
+            if (gap > 0.01) {
+                wanted.x += gapX / gap * closing;
+                wanted.y += gapZ / gap * closing;
+            }
+            const velocity = this.followVelocity;
+            const change = this._scratchVector2D_2.subVectors(wanted, velocity);
+            if (change.length() > accel * delta) change.setLength(accel * delta);
+            velocity.add(change);
+
+            currentPos.x += velocity.x * delta;
+            currentPos.z += velocity.y * delta;
+
+            // Kept in step, so normal flight carries on smoothly after clicking somewhere else
+            this.currentSpeed = velocity.length();
+            if (this.currentSpeed > 0.5) {
+                this.moveHeading.copy(velocity).normalize();
+                this.updateSpriteFrame(this.moveHeading);
+            }
+        } else if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = this._scratchVector2D_2.set(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
@@ -714,27 +787,9 @@ export default class HelicopterPlayer {
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
 
-                // Calculate angle clockwise from North where Index 2 = North (0 radians); sprite follows direction of travel
-                const angle = Math.atan2(heading.x, -heading.y);
-                const stepSize = (Math.PI * 2) / this.totalFrames;
-
-                // Only change sprite frame once the heading is clearly past the edge of the current frame's sector
-                // (dead zone, so wind cannot flip it back and forth on the border), and not in the last 2 units
-                // before the target, where the direction to the target swings around
-                const frameAngle = (this.currentFrame - 2) * stepSize;
-                const angleDiff = Math.atan2(Math.sin(angle - frameAngle), Math.cos(angle - frameAngle));
-                if (distance > 2.0 && Math.abs(angleDiff) > stepSize * 0.65) {
-                    const steps = Math.round(angle / stepSize);
-                    const frameIndex = (2 + steps) % this.totalFrames;
-                    this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
-
-                    const frameOffset = this.currentFrame * (1 / this.totalFrames);
-                    if (this.material.map) {
-                        this.material.map.offset.x = frameOffset;
-                    }
-                    if (this.material.emissiveMap) {
-                        this.material.emissiveMap.offset.x = frameOffset;
-                    }
+                // Not in the last 2 units before the target, where the direction to the target swings around
+                if (distance > 2.0) {
+                    this.updateSpriteFrame(heading);
                 }
             } else {
                 this.isMoving = false;
@@ -744,6 +799,20 @@ export default class HelicopterPlayer {
             this.currentSpeed = 0;
         }
 
+        // Ship landing: speed matched over the deck, gear down, counts towards the landing aid turning green
+        if (this.ship && delta > 0) {
+            const deck = this.ship.deckPosition;
+            const overDeck = Math.max(Math.abs(currentPos.x - deck.x), Math.abs(currentPos.z - deck.z)) <= this.landingZoneHalfSize;
+            const deckSpeed = this.shipDeckVelocity(delta);
+            const relativeSpeed = Math.hypot(
+                (currentPos.x - this._lastPosition.x) / delta - deckSpeed.x,
+                (currentPos.z - this._lastPosition.z) / delta - deckSpeed.y
+            );
+            const matched = overDeck && this.gearDown && this.engineState === 'RUNNING' && relativeSpeed < this.shipMatchTolerance;
+            this.shipMatchTime = matched ? this.shipMatchTime + delta : 0;
+        }
+        this._lastPosition.copy(currentPos);
+
         const headingAngle = ((this.currentFrame - 2) / this.totalFrames) * (Math.PI * 2);
         const forwardDist = 5.0;
         const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
@@ -751,6 +820,35 @@ export default class HelicopterPlayer {
         const targetY = currentPos.y - 5.5;
         
         this.searchLightTarget.position.set(targetX, targetY, targetZ);
+    }
+
+    // Ship's deck velocity (x, z) in frame-clock units per second, from its movement this frame
+    shipDeckVelocity(delta) {
+        const move = this.ship.deckMovement;
+        return delta > 0 ? this._scratchDeckVelocity.set(move.x / delta, move.z / delta) : this._scratchDeckVelocity.set(0, 0);
+    }
+
+    // Sprite follows the direction of travel. Only change frame once the heading is clearly past the edge of the
+    // current frame's sector (dead zone, so wind cannot flip it back and forth on the border)
+    updateSpriteFrame(heading) {
+        // Calculate angle clockwise from North where Index 2 = North (0 radians)
+        const angle = Math.atan2(heading.x, -heading.y);
+        const stepSize = (Math.PI * 2) / this.totalFrames;
+        const frameAngle = (this.currentFrame - 2) * stepSize;
+        const angleDiff = Math.atan2(Math.sin(angle - frameAngle), Math.cos(angle - frameAngle));
+        if (Math.abs(angleDiff) <= stepSize * 0.65) return;
+
+        const steps = Math.round(angle / stepSize);
+        const frameIndex = (2 + steps) % this.totalFrames;
+        this.currentFrame = (frameIndex + this.totalFrames) % this.totalFrames;
+
+        const frameOffset = this.currentFrame * (1 / this.totalFrames);
+        if (this.material.map) {
+            this.material.map.offset.x = frameOffset;
+        }
+        if (this.material.emissiveMap) {
+            this.material.emissiveMap.offset.x = frameOffset;
+        }
     }
 
     // Empty helicopter = 1.0; fuel and water add to it. Remote helicopters have no systems and stay at 1.0
