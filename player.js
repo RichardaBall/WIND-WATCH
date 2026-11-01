@@ -1,3 +1,4 @@
+// player.js
 import * as THREE from 'three';
 import { AudioManager } from './audioManager.js';
 import { crash } from './crash.js';
@@ -134,16 +135,15 @@ export default class HelicopterPlayer {
         this.dropLine.frustumCulled = false;
         this.scene.add(this.dropLine);
 
-        // Landing aid: near a helipad the drop line ends on the pad surface (not at sea level, which in this
-        // view sits far from the pad) and a ring marks the touchdown point. Colour says what pressing E does now:
-        // green = lands on the pad, amber = inside the landing zone but gear is up, white = not inside yet.
+        // Original strict helipad center coordinates for snap-to landing
         this.landingPads = [
             new THREE.Vector3(8.41, 19.81, -6.54),
             new THREE.Vector3(-10.28, 27.29, 3.74)
         ];
-        this.landingZoneHalfSize = 6.0; // Same zone shutdownEngine() checks
+        this.landingZoneHalfSize = 6.0; 
         this.landingAidRange = 20.0;
-        this.landingRingHideHeight = 10.0; // Ring disappears when closer than this above the pad
+        this.landingRingHideHeight = 10.0; 
+
         if (!this.isRemote) {
             const ringGeo = new THREE.RingGeometry(1.2, 1.8, 32);
             ringGeo.rotateX(-Math.PI / 2);
@@ -157,6 +157,64 @@ export default class HelicopterPlayer {
             this.landingMarker.renderOrder = 10;
             this.landingMarker.visible = false;
             this.scene.add(this.landingMarker);
+
+            this.landingBoxes = [];
+
+            // Tuned custom 4-corner boxes for visual feedback and zone detection
+            const tunedConfigs = [
+                {
+                    center: new THREE.Vector3(5.266, 20.536, -6.540),
+                    snapTarget: this.landingPads[0], // Original center for snapping
+                    corners: [
+                        new THREE.Vector3(1.140, 20.586, -10.540),
+                        new THREE.Vector3(16.092, 22.835, -10.540),
+                        new THREE.Vector3(16.398, 18.855, -2.540),
+                        new THREE.Vector3(0.679, 17.084, -2.338)
+                    ]
+                },
+                {
+                    center: new THREE.Vector3(-11.839, 26.667, 3.740),
+                    snapTarget: this.landingPads[1], // Original center for snapping
+                    corners: [
+                        new THREE.Vector3(-16.092, 26.667, -0.260),
+                        new THREE.Vector3(-3.538, 28.670, -0.260),
+                        new THREE.Vector3(-4.699, 25.375, 7.740),
+                        new THREE.Vector3(-17.814, 23.918, 7.740)
+                    ]
+                }
+            ];
+
+            for (let i = 0; i < tunedConfigs.length; i++) {
+                const config = tunedConfigs[i];
+                const linePoints = [
+                    config.corners[0], config.corners[1],
+                    config.corners[1], config.corners[2],
+                    config.corners[2], config.corners[3],
+                    config.corners[3], config.corners[0]
+                ];
+
+                const geo = new THREE.BufferGeometry().setFromPoints(linePoints);
+                const mat = new THREE.LineBasicMaterial({
+                    color: 0x22c55e,
+                    transparent: true,
+                    opacity: 1.0,
+                    depthTest: false,
+                    depthWrite: false
+                });
+
+                const lineSegments = new THREE.LineSegments(geo, mat);
+                lineSegments.renderOrder = 9999;
+                lineSegments.visible = false;
+                this.scene.add(lineSegments);
+
+                this.landingBoxes.push({
+                    mesh: lineSegments,
+                    geometry: geo,
+                    corners: config.corners,
+                    snapTarget: config.snapTarget,
+                    pos: config.center
+                });
+            }
         }
 
         // Southeast (SE) is 135 degrees clockwise from North, which corresponds to index 6 (2 * 22.5° + 4 * 22.5° = 135°)
@@ -204,23 +262,23 @@ export default class HelicopterPlayer {
             this.material.needsUpdate = true;
         }, () => {});
 
-        this.group.position.set(8.41, 19.81, -6.54);
-        this.targetPosition = new THREE.Vector3(8.41, 19.81, -6.54);
+        this.group.position.copy(this.landingPads[0]);
+        this.targetPosition = new THREE.Vector3().copy(this.landingPads[0]);
         this.maxSpeed = 37.5;
         this.currentSpeed = 0;
         this.isMoving = false;
 
         // Momentum: direction of travel is kept between frames, so turns at speed are arcs, not snaps
         this.moveHeading = new THREE.Vector2(0, -1);
-        this.acceleration = 40.0;      // speed up / brake rate at empty weight
-        this.turnAcceleration = 40.0;  // sideways rate at empty weight (arc radius = speed^2 / this)
-        this.maxTurnRate = 6.0;        // radians per second, when nearly hovering
-        this.fuelWeight = 0.3;         // full tank, as a share of the empty helicopter
-        this.waterWeight = 1.2;        // full bucket, as a share of the empty helicopter
-        this.loadSpeedLoss = 0.1;      // top speed lost per extra helicopter-weight (15% at full load)
+        this.acceleration = 40.0;      
+        this.turnAcceleration = 40.0;  
+        this.maxTurnRate = 6.0;        
+        this.fuelWeight = 0.3;         
+        this.waterWeight = 1.2;        
+        this.loadSpeedLoss = 0.1;      
 
         this.engineState = 'OFF'; 
-        this.targetAltitude = 19.81;  
+        this.targetAltitude = this.landingPads[0].y;  
         this.verticalVelocity = 0;
 
         this.audioManager = options.audioManager || new AudioManager();
@@ -244,6 +302,11 @@ export default class HelicopterPlayer {
             if (this.shadowMesh) this.shadowMesh.visible = visible;
             if (this.dropLine) this.dropLine.visible = visible;
             if (this.landingMarker && !visible) this.landingMarker.visible = false;
+            if (this.landingBoxes && !visible) {
+                for (const padBox of this.landingBoxes) {
+                    padBox.mesh.visible = false;
+                }
+            }
         }
     }
 
@@ -255,7 +318,7 @@ export default class HelicopterPlayer {
         this.isWinchActive = false;
         this.winchState = 'STOWED';
         this.winchTimer = 0;
-        this.currentFrame = 6; // SE on reset
+        this.currentFrame = 6; 
         this.verticalVelocity = 0;
         this.currentSpeed = 0;
         this.landingPadTarget = null;
@@ -276,9 +339,9 @@ export default class HelicopterPlayer {
             this.material.emissiveMap.offset.x = 6 * (1 / this.totalFrames);
             this.material.needsUpdate = true;
         }
-        this.group.position.set(8.41, 19.81, -6.54);
-        this.targetPosition.set(8.41, 19.81, -6.54);
-        this.targetAltitude = 19.81;
+        this.group.position.copy(this.landingPads[0]);
+        this.targetPosition.copy(this.landingPads[0]);
+        this.targetAltitude = this.landingPads[0].y;
         this.isMoving = false;
         this.rotorSpeed = 0;
         this.searchLight.intensity = 0;
@@ -286,6 +349,11 @@ export default class HelicopterPlayer {
         this.crashHandler.hideRestart();
         if (this.shadowMesh) this.shadowMesh.visible = true;
         if (this.dropLine) this.dropLine.visible = true;
+        if (this.landingBoxes) {
+            for (const padBox of this.landingBoxes) {
+                padBox.mesh.visible = false;
+            }
+        }
     }
 
     triggerCrash(isOceanCrash = false) {
@@ -293,6 +361,11 @@ export default class HelicopterPlayer {
         this.hasCrashed = true;
         this.engineState = 'CRASHED';
         if (this.landingMarker) this.landingMarker.visible = false;
+        if (this.landingBoxes) {
+            for (const padBox of this.landingBoxes) {
+                padBox.mesh.visible = false;
+            }
+        }
         this.isMoving = false;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
@@ -340,8 +413,8 @@ export default class HelicopterPlayer {
     }
 
     isInside3DBox(pos) {
-        const pad1X = 8.41, pad1Z = -6.54, pad1Y = 19.81;
-        const pad2X = -10.28, pad2Z = 3.74, pad2Y = 27.29;
+        const pad1X = this.landingPads[0].x, pad1Z = this.landingPads[0].z, pad1Y = this.landingPads[0].y;
+        const pad2X = this.landingPads[1].x, pad2Z = this.landingPads[1].z, pad2Y = this.landingPads[1].y;
         const halfSize = 4.0; 
         const boxHeight = 6.0;
 
@@ -351,23 +424,38 @@ export default class HelicopterPlayer {
         return { inPad1, inPad2, isInside: inPad1 || inPad2 };
     }
 
+    isPointInPolygon(point, corners) {
+        let x = point.x, z = point.z;
+        let inside = false;
+        for (let i = 0, j = corners.length - 1; i < corners.length; j = i++) {
+            let xi = corners[i].x, zi = corners[i].z;
+            let xj = corners[j].x, zj = corners[j].z;
+            let intersect = ((zi > z) !== (zj > z)) && (x < (xj - xi) * (z - zi) / (zj - zi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
     shutdownEngine() {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
 
-        const pad1X = 8.41, pad1Z = -6.54;
-        const pad2X = -10.28, pad2Z = 3.74;
-        const halfSize = 6.0; 
-        const pos2D = this._scratchVector2D_1.set(this.group.position.x, this.group.position.z);
-
-        const inPad1 = Math.abs(pos2D.x - pad1X) <= halfSize && Math.abs(pos2D.y - pad1Z) <= halfSize;
-        const inPad2 = Math.abs(pos2D.x - pad2X) <= halfSize && Math.abs(pos2D.y - pad2Z) <= halfSize;
+        let matchedPad = null;
+        if (this.landingBoxes) {
+            const currentPos = this.group.position;
+            for (const box of this.landingBoxes) {
+                if (this.isPointInPolygon(currentPos, box.corners)) {
+                    matchedPad = box.snapTarget; // Snaps to original center
+                    break;
+                }
+            }
+        }
 
         this.engineState = 'SHUTTING_DOWN';
         this.isMoving = false;
         this.currentSpeed = 0;
 
-        if ((inPad1 || inPad2) && this.gearDown) {
-            this.landingPadTarget = inPad1 ? new THREE.Vector3(pad1X, 19.81, pad1Z) : new THREE.Vector3(pad2X, 27.29, pad2Z);
+        if (matchedPad && this.gearDown) {
+            this.landingPadTarget = matchedPad.clone();
             this.targetAltitude = 45.0; 
         } else {
             this.landingPadTarget = null;
@@ -602,29 +690,41 @@ export default class HelicopterPlayer {
             currentPos.z += windForce.z * delta * 0.15;
         }
 
-        if (this.shadowMesh && this.dropLine) {
-            this.shadowMesh.position.set(currentPos.x, 0.2, currentPos.z);
-            
-            const heightFactor = Math.max(0.4, 1.0 - (currentPos.y / 60.0));
-            this.shadowMesh.scale.set(heightFactor, heightFactor, heightFactor);
+        // Conditional green box visibility and coloring
+        if (this.landingBoxes && !this.isRemote) {
+            for (const padBox of this.landingBoxes) {
+                const inBox = this.isPointInPolygon(currentPos, padBox.corners);
+                const isInFlight = this.engineState === 'RUNNING' && !this.hasCrashed;
+                const shouldShow = isInFlight && this.gearDown && inBox;
+                padBox.mesh.visible = shouldShow;
+            }
+        }
 
-            // Nearest helipad by the same square distance the landing zone uses
+        if (this.shadowMesh && this.dropLine) {
             let nearPad = null;
             let padDist = Infinity;
-            for (const pad of this.landingPads) {
-                const dist = Math.max(Math.abs(currentPos.x - pad.x), Math.abs(currentPos.z - pad.z));
-                if (dist < padDist && dist <= this.landingAidRange && currentPos.y > pad.y) {
-                    nearPad = pad;
-                    padDist = dist;
+            const pos2D = this._scratchVector2D_1.set(currentPos.x, currentPos.z);
+            const mainBase = window.game && window.game.mainBase;
+            const isOverIsland = mainBase ? mainBase.isOpaqueAtWorldPosition(currentPos) : (pos2D.length() < 50.0);
+            const isOverIslandBounds = pos2D.length() < 50.0;
+
+            if (!isOverIslandBounds) {
+                for (const pad of this.landingPads) {
+                    const dist = Math.max(Math.abs(currentPos.x - pad.x), Math.abs(currentPos.z - pad.z));
+                    if (dist < padDist && dist <= this.landingAidRange && currentPos.y > pad.y) {
+                        nearPad = pad;
+                        padDist = dist;
+                    }
                 }
             }
 
             const lineMat = this.dropLine.material;
             let lineBottomY = 0.2;
+            
             if (nearPad && this.engineState !== 'OFF') {
+                lineBottomY = nearPad.y;
                 const inZone = padDist <= this.landingZoneHalfSize;
                 const aidColor = inZone ? (this.gearDown ? 0x22c55e : 0xf59e0b) : 0xffffff;
-                lineBottomY = nearPad.y;
                 lineMat.color.setHex(aidColor);
                 lineMat.opacity = 0.95;
                 lineMat.dashSize = 0.6;
@@ -632,9 +732,16 @@ export default class HelicopterPlayer {
                 if (this.landingMarker) {
                     this.landingMarker.position.set(currentPos.x, nearPad.y + 0.05, currentPos.z);
                     this.landingMarker.material.color.setHex(aidColor);
-                    // Hide the ring in the last stretch above the pad (final descent, or just lifted off)
                     this.landingMarker.visible = currentPos.y - nearPad.y > this.landingRingHideHeight;
                 }
+            } else if (isOverIsland && this.engineState !== 'OFF') {
+                const surfaceY = mainBase ? mainBase.getSurfaceHeightAt(currentPos.x, currentPos.z) : 20.0;
+                lineBottomY = Math.min(surfaceY, currentPos.y - 2.0);
+                lineMat.color.setHex(0xffffff);
+                lineMat.opacity = 0.25;
+                lineMat.dashSize = 0.2;
+                lineMat.gapSize = 0.6;
+                if (this.landingMarker) this.landingMarker.visible = false;
             } else {
                 lineMat.color.setHex(0xffffff);
                 lineMat.opacity = 0.25;
@@ -642,6 +749,12 @@ export default class HelicopterPlayer {
                 lineMat.gapSize = 0.6;
                 if (this.landingMarker) this.landingMarker.visible = false;
             }
+
+            const shadowY = (isOverIsland || nearPad) ? lineBottomY + 0.05 : 0.2;
+            this.shadowMesh.position.set(currentPos.x, shadowY, currentPos.z);
+            
+            const heightFactor = Math.max(0.4, 1.0 - (currentPos.y / 60.0));
+            this.shadowMesh.scale.set(heightFactor, heightFactor, heightFactor);
 
             const positions = this.dropLine.geometry.attributes.position.array;
             positions[0] = currentPos.x;
@@ -671,7 +784,6 @@ export default class HelicopterPlayer {
                 const moveDir = this._scratchVector2D_moveDir.subVectors(targetXZ, currentXZ).normalize();
                 const heading = this.moveHeading;
 
-                // Nearly hovering: can set off in any direction. At speed: turn rate limited by sideways grip, so it carves an arc
                 if (this.currentSpeed < 1.0) {
                     heading.copy(moveDir);
                 } else {
@@ -680,7 +792,6 @@ export default class HelicopterPlayer {
                     heading.rotateAround(this._scratchVector2D_1.set(0, 0), THREE.MathUtils.clamp(turnAngle, -maxTurn, maxTurn));
                 }
 
-                // Brake in time to stop at the target, and slow down when the target is off the nose (full stop if behind)
                 const offNose = Math.atan2(heading.x * moveDir.y - heading.y * moveDir.x, heading.dot(moveDir));
                 let desiredSpeed = Math.min(targetMaxSpeed, Math.sqrt(2.0 * accel * 0.8 * distance));
                 desiredSpeed = Math.max(desiredSpeed, 2.0) * Math.max(0, Math.cos(offNose));
@@ -700,13 +811,9 @@ export default class HelicopterPlayer {
                 currentPos.x = currentXZ.x;
                 currentPos.z = currentXZ.y;
 
-                // Calculate angle clockwise from North where Index 2 = North (0 radians); sprite follows direction of travel
                 const angle = Math.atan2(heading.x, -heading.y);
                 const stepSize = (Math.PI * 2) / this.totalFrames;
 
-                // Only change sprite frame once the heading is clearly past the edge of the current frame's sector
-                // (dead zone, so wind cannot flip it back and forth on the border), and not in the last 2 units
-                // before the target, where the direction to the target swings around
                 const frameAngle = (this.currentFrame - 2) * stepSize;
                 const angleDiff = Math.atan2(Math.sin(angle - frameAngle), Math.cos(angle - frameAngle));
                 if (distance > 2.0 && Math.abs(angleDiff) > stepSize * 0.65) {
@@ -739,7 +846,6 @@ export default class HelicopterPlayer {
         this.searchLightTarget.position.set(targetX, targetY, targetZ);
     }
 
-    // Empty helicopter = 1.0; fuel and water add to it. Remote helicopters have no systems and stay at 1.0
     getLoadFactor() {
         const systems = this.helicopterSystems;
         if (!systems) return 1.0;

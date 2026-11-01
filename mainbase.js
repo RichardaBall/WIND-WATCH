@@ -1,3 +1,4 @@
+// mainbase.js
 import * as THREE from 'three';
 
 export class MainBase {
@@ -211,17 +212,19 @@ export class MainBase {
         this.buildLightGroup('amber', 0xffaa00);
         this.buildLightGroup('white', 0xffffff);
 
-        // The steady lamps are baked into a light map instead of being real PointLights (see buildNightLightMap)
         this.lightMapScale = 3.0;
         this.material.lightMap = this.buildNightLightMap(72, 15);
         this.material.lightMapIntensity = 0.0;
         this.material.needsUpdate = true;
     }
 
-    // Bakes the night-time light pools of the steady base lamps into one texture, using the same falloff
-    // three.js applies to a PointLight (range 15, decay 2, lamp height pos.z above the base plane).
-    // Each real PointLight had to be evaluated per pixel by every lit material in the scene;
-    // the light map costs one texture lookup on the base only.
+    getSurfaceHeightAt(x, z) {
+        const groupPos = this.group.position;
+        const n = new THREE.Vector3(0, 0, 1).applyQuaternion(this.group.quaternion);
+        if (Math.abs(n.y) < 0.0001) return groupPos.y;
+        return groupPos.y + (n.x * (groupPos.x - x) + n.z * (groupPos.z - z)) / n.y;
+    }
+
     buildNightLightMap(baseSize, range) {
         const size = 512;
         const halfSize = baseSize / 2;
@@ -370,7 +373,6 @@ export class MainBase {
                 lightObj.flashTimer = Math.random() * (pos.flashInterval || 0.5);
                 lightObj.flashState = true;
 
-                // A flashing lamp cannot live in the static light map, so it gets an additive glow sprite
                 const glowMat = new THREE.MeshBasicMaterial({
                     color: colorHex,
                     map: this.glowTexture,
@@ -474,8 +476,6 @@ export class MainBase {
         this.foamGeometry.setDrawRange(0, particleIdx);
         this.foamGeometry.attributes.position.needsUpdate = true;
 
-        // Old PointLight intensity was nightFactor * 3.0; 3.5 makes up for the specular shine a light map cannot give.
-        // The bake is stored pre-multiplied by lightMapScale.
         this.material.lightMapIntensity = nightFactor * 3.5 / this.lightMapScale;
         this.allLights.forEach(item => {
             if (item.config.flashing) {
