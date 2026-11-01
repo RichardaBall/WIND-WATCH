@@ -54,7 +54,8 @@ export default class HelicopterPlayer {
         this.group.add(this.mesh);
 
         this.rotorGroup = new THREE.Group();
-        this.rotorGroup.position.set(0, 2.0, 0); 
+        // Moved towards the camera by the same 8, 8, 8 as the sprite (see this.mesh), so the blades stay in front of the body
+        this.rotorGroup.position.set(8, 2.0 + 8, 8);
         this.group.add(this.rotorGroup);
 
         const rotorGeo = new THREE.PlaneGeometry(8, 0.6);
