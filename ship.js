@@ -168,18 +168,40 @@ export class SupportShip {
         house.position.set(4, deck + 1.6, 0);
         this.group.add(house);
 
-        const bridge = new THREE.Mesh(new RoundedBoxGeometry(7.5, 2.8, 9.4, 2, 0.1), whiteMat);
-        // Front flush with the deckhouse front (deckhouse ends at 11.5, bridge is 7.5 long)
-        bridge.position.set(7.75, deck + 4.6, 0);
+        // Bridge: half an octagon from above (straight back and sides, angled front faces), wider than the hull so
+        // its wings overhang both sides. Far enough forward that the angled faces cover the deckhouse's front
+        // corners (deckhouse front at 11.5, 4.2 out from the middle)
+        const bridgeHalfWidth = 6.5;
+        const bridgeSide = 3.0;    // straight side before the angled faces
+        const bridgeAngled = 3.8;  // how far the angled faces reach forward (and inward)
+        const bridgeBack = 11.5 - bridgeSide - (bridgeHalfWidth - 4.2) + 0.2;
+        const bridgeOutline = new THREE.Shape();
+        bridgeOutline.moveTo(0, -bridgeHalfWidth);
+        bridgeOutline.lineTo(bridgeSide, -bridgeHalfWidth);
+        bridgeOutline.lineTo(bridgeSide + bridgeAngled, -bridgeHalfWidth + bridgeAngled);
+        bridgeOutline.lineTo(bridgeSide + bridgeAngled, bridgeHalfWidth - bridgeAngled);
+        bridgeOutline.lineTo(bridgeSide, bridgeHalfWidth);
+        bridgeOutline.lineTo(0, bridgeHalfWidth);
+        bridgeOutline.closePath();
+
+        // Outline is drawn in X/Y and extruded along +Z: turn it so it lies flat and the extrusion points up
+        const bridgeGeo = new THREE.ExtrudeGeometry(bridgeOutline, { depth: 2.8, bevelEnabled: false });
+        bridgeGeo.rotateX(-Math.PI / 2);
+        const bridge = new THREE.Mesh(bridgeGeo, whiteMat);
+        bridge.position.set(bridgeBack, deck + 3.2, 0);
         this.group.add(bridge);
 
-        const windows = new THREE.Mesh(new RoundedBoxGeometry(7.6, 0.9, 9.5, 2, 0.1), windowMat);
-        windows.position.set(7.75, deck + 5.1, 0);
+        // Window band: same outline, a touch larger so it sits on the bridge walls
+        const windowGeo = new THREE.ExtrudeGeometry(bridgeOutline, { depth: 0.9, bevelEnabled: false });
+        windowGeo.rotateX(-Math.PI / 2);
+        const windows = new THREE.Mesh(windowGeo, windowMat);
+        windows.scale.set(1.01, 1, 1.01);
+        windows.position.set(bridgeBack - 0.03, deck + 4.65, 0);
         this.group.add(windows);
 
         // Big radar dome on the bridge roof
         const radome = this.createRadome(5.2);
-        radome.position.set(8.25, deck + 6.0, 0);
+        radome.position.set(bridgeBack + (bridgeSide + bridgeAngled) / 2, deck + 6.0, 0);  // centred on the bridge roof
         this.group.add(radome);
 
         // Funnel behind the bridge, blue top band
@@ -266,9 +288,11 @@ export class SupportShip {
             dot.position.set(x, y, z);
             this.group.add(dot);
         };
-        navLight(0xff2222, 7.75, deck + 5.8, -4.9);  // port (left), red
-        navLight(0x22ff44, 7.75, deck + 5.8, 4.9);   // starboard (right), green
-        navLight(0xffffff, 8.25, deck + 6.0 + radome.userData.topHeight + 0.2, 0);  // masthead, white, on top of the dome
+        // Side lights at the bridge wing tips
+        const wingX = bridgeBack + bridgeSide / 2;
+        navLight(0xff2222, wingX, deck + 5.8, -bridgeHalfWidth - 0.2);  // port (left), red
+        navLight(0x22ff44, wingX, deck + 5.8, bridgeHalfWidth + 0.2);   // starboard (right), green
+        navLight(0xffffff, radome.position.x, deck + 6.0 + radome.userData.topHeight + 0.2, 0);  // masthead, white, on top of the dome
     }
 
     // Radar dome built from panels like a real one: hexagons with a few pentagons (the panel layout is the dual of a
