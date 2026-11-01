@@ -226,6 +226,8 @@ export class Game {
                 rp.gearDown = data.gearDown ?? rp.gearDown;
                 if (rp.playerRef) {
                     rp.playerRef.gearDown = rp.gearDown;
+                    // Their winch system stops the rotor wash once the rotor has run down
+                    rp.playerRef.rotorSpeed = rp.rotorSpeed;
                 }
                 rp.winchState = data.winchState || 'STOWED';
                 rp.isDroppingWater = !!data.isDroppingWater;

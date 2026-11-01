@@ -216,8 +216,13 @@ export class WinchSystem {
 
         const overHelipad = this.isOverHelipad(heliWorldPos);
         const isLowHover = heliWorldPos.y <= 15.0;
+        // No wash once the rotor has run down, or while landing on or parked on a pad: the ship's deck is low enough
+        // that a helicopter on it otherwise counts as hovering low over the sea
+        const ref = this.playerRef;
+        const onPad = !!(ref && (ref.landingPadTarget || ref.restingPad));
+        const rotorTurning = !ref || ref.rotorSpeed === undefined || ref.rotorSpeed > 5;
 
-        if (!overHelipad && !this.isDescendingForWinch && isLowHover && heightAboveWater > 0 && heightAboveWater <= 35.0) {
+        if (!overHelipad && !onPad && rotorTurning && !this.isDescendingForWinch && isLowHover && heightAboveWater > 0 && heightAboveWater <= 35.0) {
             const intensity = Math.max(0, (35.0 - heightAboveWater) / 35.0);
             const spawnCount = Math.floor(intensity * 12); 
 
