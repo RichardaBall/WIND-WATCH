@@ -31,6 +31,7 @@ export class SupportShip {
 
         this.loadModel();
         this.buildLights();
+        this.buildWake();
         this.update();
         this.deckMovement.set(0, 0, 0);
     }
@@ -124,6 +125,86 @@ export class SupportShip {
         navLight(0xffffff, 1.5, 16.2, 0);     // masthead, white
     }
 
+    // Foam just above the sea: a trail behind the stern that widens and fades. A flat see-through strip; the foam
+    // pattern scrolls backwards (update) so the ship seems to move through still water
+    buildWake() {
+        const stern = -this.length / 2;
+        const y = -1.85; // just above the water (-2) and its night overlay (-1.9)
+
+        this.foamTexture = this.createFoamTexture();
+        this.foamTexture.wrapS = THREE.RepeatWrapping;
+        this.foamTexture.wrapT = THREE.RepeatWrapping;
+        this.wakeMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            map: this.foamTexture,
+            alphaMap: this.createWakeFadeTexture(),
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.0
+        });
+
+        // Strip from (x0, half-width w0) to (x1, w1). v runs 0..1 from start to end (the fade); the foam repeats along it
+        const strip = (x0, w0, x1, w1) => {
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.Float32BufferAttribute([
+                x0, y, -w0, x0, y, w0, x1, y, -w1, x1, y, w1
+            ], 3));
+            geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+            geo.setIndex([0, 2, 1, 1, 2, 3]);
+            const mesh = new THREE.Mesh(geo, this.wakeMaterial);
+            mesh.renderOrder = 1;
+            this.group.add(mesh);
+        };
+        this.wakeLength = 47;
+        strip(stern + 1.0, 4.5, stern - this.wakeLength, 16.0);  // stern wake
+        this.foamTexture.repeat.set(1, this.wakeLength / 12);
+    }
+
+    // White foam flecks, denser along both edges (the churned water off the quarters) than in the middle
+    createFoamTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        for (let i = 0; i < 700; i++) {
+            const u = Math.random();
+            const edge = Math.min(u, 1 - u);
+            if (Math.random() < edge * 1.6) continue; // fewer flecks towards the middle
+            const v = Math.random();
+            const r = 1 + Math.random() * 3;
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.25 + Math.random() * 0.6})`;
+            for (const dy of [-128, 0, 128]) { // drawn three times so the pattern tiles seamlessly along the wake
+                ctx.beginPath();
+                ctx.arc(u * 128, v * 128 + dy, r, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        return new THREE.CanvasTexture(canvas);
+    }
+
+    // Wake strength along and across a strip (alpha map): strongest at the start, fading to nothing at the end and sides
+    createWakeFadeTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        const img = ctx.createImageData(64, 128);
+        for (let py = 0; py < 128; py++) {
+            const along = 1 - py / 127; // canvas top is v = 1 (the far end)
+            const lengthFade = Math.pow(1 - along, 1.5);
+            for (let px = 0; px < 64; px++) {
+                const across = Math.abs(px / 63 - 0.5) * 2;
+                const sideFade = 1 - Math.pow(across, 4);
+                const a = Math.round(255 * lengthFade * sideFade);
+                const i = (py * 64 + px) * 4;
+                img.data[i] = img.data[i + 1] = img.data[i + 2] = a;
+                img.data[i + 3] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        return new THREE.CanvasTexture(canvas);
+    }
+
     createGlowTexture() {
         const canvas = document.createElement('canvas');
         canvas.width = 64;
@@ -139,8 +220,11 @@ export class SupportShip {
     }
 
     update(nightFactor = 0) {
-        // Deck light pools fade in with nightfall
+        // Deck light pools fade in with nightfall; the wake dims at night like the island's surf
         this.poolMaterial.opacity = nightFactor * 0.5;
+        this.wakeMaterial.opacity = 0.7 * (1 - 0.6 * nightFactor);
+        // Foam stays put in the water, so along the ship it drifts backwards at the ship's speed (one repeat = 12 units)
+        this.foamTexture.offset.y = -((Date.now() / 1000) * this.speed / 12) % 1;
 
         const angle = ((Date.now() / 1000) * this.speed / this.routeRadius) % (Math.PI * 2);
         const cos = Math.cos(angle);
