@@ -224,10 +224,8 @@ export default class HelicopterPlayer {
         this.waterWeight = 1.2;        // full bucket, as a share of the empty helicopter
         this.loadSpeedLoss = 0.1;      // top speed lost per extra helicopter-weight (15% at full load)
 
-        // Landing on the moving ship: clicking it flies over its deck and keeps pace. The landing aid turns green
-        // (and E lands) once the ship's speed is matched over the deck, gear down, for shipMatchHold seconds
-        this.followPad = null;                 // ship deck being followed
-        this.followVelocity = new THREE.Vector2();
+        // Landing on the moving ship: the pilot steers to keep pace with it. The landing aid turns green (and E
+        // lands) once the ship's speed is matched over the deck, gear down, for shipMatchHold seconds
         this.shipMatchTime = 0;
         this.shipMatchHold = 3.0;              // seconds
         this.shipMatchTolerance = 0.8;         // speed difference (units per second) that still counts as matched
@@ -275,7 +273,6 @@ export default class HelicopterPlayer {
         this.currentSpeed = 0;
         this.landingPadTarget = null;
         this.restingPad = null;
-        this.followPad = null;
         this.shipMatchTime = 0;
         this.isTakingOff = false;
 
@@ -312,7 +309,6 @@ export default class HelicopterPlayer {
         this.engineState = 'CRASHED';
         if (this.landingMarker) this.landingMarker.visible = false;
         this.isMoving = false;
-        this.followPad = null;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
         this.searchLight.intensity = 0;
@@ -387,7 +383,6 @@ export default class HelicopterPlayer {
         this.engineState = 'SHUTTING_DOWN';
         this.isMoving = false;
         this.currentSpeed = 0;
-        this.followPad = null;
 
         if (zonePad && this.isPadReady(zonePad)) {
             this.landingPadTarget = zonePad;
@@ -437,20 +432,13 @@ export default class HelicopterPlayer {
         }
     }
 
-    // followShip: newPos is the ship's deck, to be followed as it moves (see followPad)
-    setTarget(newPos, followShip = false) {
+    setTarget(newPos) {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff || this.engineState === 'SHUTTING_DOWN') {
             return;
         }
         if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
             return;
         }
-
-        if (followShip && !this.followPad) {
-            // Start from the current velocity so following the ship doesn't jerk
-            this.followVelocity.copy(this.moveHeading).multiplyScalar(this.currentSpeed);
-        }
-        this.followPad = followShip && this.winchState === 'STOWED' ? newPos : null;
 
         this.targetPosition.copy(newPos);
         const clickPos2D = this._scratchVector2D_1.set(newPos.x, newPos.z);
@@ -705,46 +693,7 @@ export default class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        if (this.followPad && (this.engineState !== 'RUNNING' || this.isTakingOff || this.winchState !== 'STOWED')) {
-            this.followPad = null;
-            this.isMoving = false;
-        }
-
-        if (this.followPad) {
-            // Keeping pace with the ship: aim for the ship's own velocity plus a closing speed towards the deck that
-            // shrinks as the gap closes, and change velocity no faster than the helicopter can accelerate
-            const load = this.getLoadFactor();
-            const accel = this.acceleration / load;
-            const loadedMaxSpeed = this.maxSpeed * (1.0 - this.loadSpeedLoss * (load - 1.0));
-            const maxSpeed = this.gearDown ? loadedMaxSpeed * 0.5 : loadedMaxSpeed;
-            const gapX = this.followPad.x - currentPos.x;
-            const gapZ = this.followPad.z - currentPos.z;
-            const gap = Math.hypot(gapX, gapZ);
-            const closing = Math.min(maxSpeed, Math.sqrt(2.0 * accel * 0.8 * gap), gap * 2.0);
-
-            // The deck's own speed, measured from how far it moved this frame: the ship runs on the wall clock, the
-            // helicopter on the frame clock (capped at 0.1 s), so the ship's nominal speed is off after a slow frame
-            const deckSpeed = this.shipDeckVelocity(delta);
-            const wanted = this._scratchVector2D_moveDir.set(deckSpeed.x, deckSpeed.y);
-            if (gap > 0.01) {
-                wanted.x += gapX / gap * closing;
-                wanted.y += gapZ / gap * closing;
-            }
-            const velocity = this.followVelocity;
-            const change = this._scratchVector2D_2.subVectors(wanted, velocity);
-            if (change.length() > accel * delta) change.setLength(accel * delta);
-            velocity.add(change);
-
-            currentPos.x += velocity.x * delta;
-            currentPos.z += velocity.y * delta;
-
-            // Kept in step, so normal flight carries on smoothly after clicking somewhere else
-            this.currentSpeed = velocity.length();
-            if (this.currentSpeed > 0.5) {
-                this.moveHeading.copy(velocity).normalize();
-                this.updateSpriteFrame(this.moveHeading);
-            }
-        } else if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+        if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
             const targetXZ = this._scratchVector2D_2.set(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);

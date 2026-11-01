@@ -107,13 +107,6 @@ export class InputManager {
 
     updateTarget() {
         this.raycaster.setFromCamera(this.mouse, this.camera);
-
-        // Clicking on the ship means: fly to its helideck and keep pace with it
-        if (this.ship && this.raycaster.intersectObject(this.ship.group, true).length > 0) {
-            this.player.setTarget(this.ship.deckPosition, true);
-            return;
-        }
-
         const targetPoint = new THREE.Vector3();
         this.raycaster.ray.intersectPlane(this.planeIntersectTarget, targetPoint);
 
