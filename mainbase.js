@@ -21,13 +21,18 @@ export class MainBase {
         this.texWidth = 512;
         this.texHeight = 512;
 
+        this.currentActiveMap = null;
+        this.isFading = false;
+        this.fadeProgress = 0.0;
+
         this.loadTextureWithPixelData('mainbase.webp', (tex, data, w, h) => {
             this.baseTexture = tex;
             this.basePixelData = data;
             this.texWidth = w;
             this.texHeight = h;
-            if (this.material.map === this.baseTexture || !this.material.map) {
+            if (!this.material.map) {
                 this.material.map = this.baseTexture;
+                this.currentActiveMap = this.baseTexture;
                 this.material.needsUpdate = true;
             }
         });
@@ -42,6 +47,7 @@ export class MainBase {
             this.rainPixelData = data;
         });
 
+        // --- Base Material & Mesh ---
         this.material = new THREE.MeshStandardMaterial({
             map: this.baseTexture,
             transparent: true,
@@ -54,6 +60,21 @@ export class MainBase {
         this.mesh = new THREE.Mesh(baseGeometry, this.material);
         this.mesh.renderOrder = 0;
         this.group.add(this.mesh);
+
+        // --- Overlay Material & Mesh for Smooth Cross-Fading ---
+        this.overlayMaterial = new THREE.MeshStandardMaterial({
+            map: this.baseTexture,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false,
+            roughness: 0.4,
+            opacity: 0.0
+        });
+
+        this.overlayMesh = new THREE.Mesh(baseGeometry, this.overlayMaterial);
+        this.overlayMesh.position.set(0, 0, 0.02); // Slight offset to prevent z-fighting
+        this.overlayMesh.renderOrder = 1;
+        this.group.add(this.overlayMesh);
 
         // --- 3D Landing Area Safe Zone Boxes (Invisible Collision/Landing Volumes) ---
         const boxHeight = 6.0;
@@ -397,9 +418,32 @@ export class MainBase {
         const hasSnow = weatherStr.includes('SNOW');
         const hasRain = weatherStr.includes('RAIN') || weatherStr.includes('STORM');
         const targetMap = hasSnow ? this.snowTexture : (hasRain ? this.rainTexture : this.baseTexture);
-        if (this.material.map !== targetMap && targetMap.image) {
-            this.material.map = targetMap;
-            this.material.needsUpdate = true;
+
+        // --- Smooth Texture Cross-Fade Logic ---
+        if (this.currentActiveMap !== targetMap && targetMap.image) {
+            this.currentActiveMap = targetMap;
+            this.overlayMaterial.map = targetMap;
+            this.overlayMaterial.opacity = 0.0;
+            this.overlayMaterial.needsUpdate = true;
+            this.isFading = true;
+            this.fadeProgress = 0.0;
+        }
+
+        if (this.isFading) {
+            // Fade over 2.5 seconds
+            this.fadeProgress += delta / 2.5;
+            if (this.fadeProgress >= 1.0) {
+                this.fadeProgress = 1.0;
+                this.isFading = false;
+                // Swap base map to target map and reset overlay opacity
+                this.material.map = targetMap;
+                this.material.needsUpdate = true;
+                this.overlayMaterial.opacity = 0.0;
+                this.overlayMaterial.needsUpdate = true;
+            } else {
+                this.overlayMaterial.opacity = this.fadeProgress;
+                this.overlayMaterial.needsUpdate = true;
+            }
         }
 
         let baseColorFactor = 1 - nightFactor * 0.4;
@@ -419,6 +463,7 @@ export class MainBase {
         }
 
         this.material.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);
+        this.overlayMaterial.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);
 
         if (this.foamMaterial) {
             const baseOp = this.foamParams.opacity;
@@ -477,6 +522,9 @@ export class MainBase {
         this.foamGeometry.attributes.position.needsUpdate = true;
 
         this.material.lightMapIntensity = nightFactor * 3.5 / this.lightMapScale;
+        this.overlayMaterial.lightMapIntensity = this.material.lightMapIntensity;
+        this.overlayMaterial.lightMap = this.material.lightMap;
+
         this.allLights.forEach(item => {
             if (item.config.flashing) {
                 item.flashTimer += delta;

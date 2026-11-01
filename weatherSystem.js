@@ -1,3 +1,4 @@
+// weatherSystem.js
 import * as THREE from 'three';
 
 export class WeatherSystem {
@@ -10,7 +11,18 @@ export class WeatherSystem {
         this.currentWeather = 'CLEAR';
         this.targetWeather = 'CLEAR';
 
-        // Testing override properties
+        // Transition tracking
+        this.transitionProgress = 1.0; // 1.0 = fully transitioned
+        this.transitionDuration = 3.0; // Duration of weather change in seconds
+        
+        // Source and Target parameters for blending
+        this.fromOpacity = 0.0;
+        this.toOpacity = 0.0;
+        this.fromFogFar = 700;
+        this.toFogFar = 700;
+        this.fromWind = new THREE.Vector3(1.0, 0, 0.5);
+        this.toWind = new THREE.Vector3(1.0, 0, 0.5);
+
         this.useWeatherOverride = false;
         this.overrideWeatherType = 'CLEAR';
 
@@ -26,10 +38,6 @@ export class WeatherSystem {
             this.positions[i * 3] = (Math.random() - 0.5) * 250;
             this.positions[i * 3 + 1] = Math.random() * 150;
             this.positions[i * 3 + 2] = (Math.random() - 0.5) * 250;
-
-            this.velocities[i * 3] = 0;
-            this.velocities[i * 3 + 1] = -70;
-            this.velocities[i * 3 + 2] = 0;
         }
 
         this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
@@ -74,12 +82,17 @@ export class WeatherSystem {
 
     setWeather(weatherType) {
         if (this.targetWeather === weatherType) return;
+        
+        // Capture current active states as starting points for the smooth blend
+        this.currentWeather = this.targetWeather;
         this.targetWeather = weatherType;
-        this.currentWeather = weatherType;
+        this.transitionProgress = 0.0; // Reset transition timer
 
-        console.log(`🌧️ Weather applied locally: ${this.targetWeather}`);
+        this.fromOpacity = this.material.opacity;
+        this.fromFogFar = this.scene.fog ? this.scene.fog.far : 700;
+        this.fromWind.copy(this.windForce);
 
-        const fog = this.scene.fog;
+        console.log(`🌧️ Weather transitioning from ${this.currentWeather} to ${this.targetWeather}...`);
 
         // Manage audio state based on weather
         if (this.audioManager) {
@@ -98,45 +111,45 @@ export class WeatherSystem {
             }
         }
 
-        // Adjust linear fog `far` distance depending on weather severity (smaller `far` = closer/thicker fog)
+        // Define target states
         if (this.targetWeather === 'CLEAR') {
-            this.material.opacity = 0.0;
-            this.windForce.set(1.0, 0, 0.5);
-            if (fog) fog.far = 700;
+            this.toOpacity = 0.0;
+            this.toWind.set(1.0, 0, 0.5);
+            this.toFogFar = 700;
         } else if (this.targetWeather === 'RAIN') {
-            this.material.opacity = 0.85;
+            this.toOpacity = 0.85;
             this.material.color.setHex(0xa0c0e0);
             this.material.size = 2.5;
-            this.windForce.set(3.0, 0, 2.0);
-            if (fog) fog.far = 400;
+            this.toWind.set(3.0, 0, 2.0);
+            this.toFogFar = 400;
         } else if (this.targetWeather === 'FOG') {
-            this.material.opacity = 0.0;
-            this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.far = 150; // Dense fog in the distance, but clear right around the player due to `near = 40`
+            this.toOpacity = 0.0;
+            this.toWind.set(0.5, 0, 0.5);
+            this.toFogFar = 150;
         } else if (this.targetWeather === 'RAIN_FOG') {
-            this.material.opacity = 0.8;
+            this.toOpacity = 0.8;
             this.material.color.setHex(0xa0c0e0);
             this.material.size = 2.5;
-            this.windForce.set(3.0, 0, 2.0);
-            if (fog) fog.far = 180;
+            this.toWind.set(3.0, 0, 2.0);
+            this.toFogFar = 180;
         } else if (this.targetWeather === 'SNOW') {
-            this.material.opacity = 0.9;
+            this.toOpacity = 0.9;
             this.material.color.setHex(0xffffff);
             this.material.size = 3.5;
-            this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.far = 400;
+            this.toWind.set(0.5, 0, 0.5);
+            this.toFogFar = 400;
         } else if (this.targetWeather === 'SNOW_FOG') {
-            this.material.opacity = 0.85;
+            this.toOpacity = 0.85;
             this.material.color.setHex(0xffffff);
             this.material.size = 3.5;
-            this.windForce.set(0.5, 0, 0.5);
-            if (fog) fog.far = 180;
+            this.toWind.set(0.5, 0, 0.5);
+            this.toFogFar = 180;
         } else if (this.targetWeather === 'STORM') {
-            this.material.opacity = 0.95;
+            this.toOpacity = 0.95;
             this.material.color.setHex(0x80a0c0);
             this.material.size = 3.0;
-            this.windForce.set(9.0, 0, 7.0);
-            if (fog) fog.far = 250;
+            this.toWind.set(9.0, 0, 7.0);
+            this.toFogFar = 250;
             this.lightningTimer = 0;
             this.nextLightningTime = 3.0 + Math.random() * 4.0;
         }
@@ -188,6 +201,22 @@ export class WeatherSystem {
             }
         }
 
+        // --- Smooth Transition Interpolation (Lerp) ---
+        if (this.transitionProgress < 1.0) {
+            this.transitionProgress = Math.min(1.0, this.transitionProgress + delta / this.transitionDuration);
+            
+            // Interpolate particle opacity
+            this.material.opacity = THREE.MathUtils.lerp(this.fromOpacity, this.toOpacity, this.transitionProgress);
+
+            // Interpolate wind forces smoothly
+            this.windForce.lerpVectors(this.fromWind, this.toWind, this.transitionProgress);
+
+            // Interpolate fog distance smoothly
+            if (this.scene.fog) {
+                this.scene.fog.far = THREE.MathUtils.lerp(this.fromFogFar, this.toFogFar, this.transitionProgress);
+            }
+        }
+
         if (this.targetWeather === 'STORM') {
             this.lightningTimer += delta;
             if (this.lightningTimer >= this.nextLightningTime) {
@@ -215,7 +244,6 @@ export class WeatherSystem {
                 positions[idx + 2] += this.windForce.z * delta;
             }
 
-            // Loop particles around camera position
             if (positions[idx + 1] < 0) {
                 positions[idx + 1] = 140;
                 positions[idx] = camPos.x + (Math.random() - 0.5) * 250;
