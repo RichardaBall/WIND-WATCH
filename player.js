@@ -510,7 +510,8 @@ export default class HelicopterPlayer {
                 }
             }
 
-            if (isOverOcean && pos.y <= 2.0) {
+            // Not when coming down onto or parked on a pad: the frigate's helideck (1.82) sits below this line
+            if (isOverOcean && pos.y <= 2.0 && !this.landingPadTarget && !this.restingPad) {
                 this.triggerCrash(true);
                 return;
             }
