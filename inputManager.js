@@ -67,13 +67,13 @@ export class InputManager {
                     console.log("Water tank is full! Cannot select water fill tool.");
                     return;
                 }
-                this.helicopterSystems.setTool('WINCH');
+                this.helicopterSystems.setTool('SNORKEL');
             }
             if (e.code === 'Space') {
                 if (!e.repeat) {
                     if (this.helicopterSystems.activeToolKey === 'WATER') {
                         this.helicopterSystems.startActiveTool();
-                    } else if (this.helicopterSystems.activeToolKey === 'WINCH') {
+                    } else if (this.helicopterSystems.activeToolKey === 'SNORKEL') {
                         this.helicopterSystems.toggleActiveTool();
                     }
                 }

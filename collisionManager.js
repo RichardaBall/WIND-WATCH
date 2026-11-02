@@ -32,15 +32,15 @@ export class CollisionManager {
 
         const playerPos = this.player.getPosition();
 
-        // 1. Check Configurable Mainbase Cylinder Collision (triggered during snorkelling / winch mode)
+        // 1. Check Configurable Mainbase Cylinder Collision (triggered during snorkelling mode)
         const cyl = this.mainbaseCylinder;
         const dx = playerPos.x - cyl.position.x;
         const dz = playerPos.z - cyl.position.z;
         const horizDist = Math.sqrt(dx * dx + dz * dz);
 
-        const isSnorkellingOrWinchActive = (this.player.winchState !== 'STOWED');
+        const isSnorkellingActive = (this.player.snorkelState !== 'STOWED');
 
-        if (horizDist <= cyl.radius && playerPos.y >= cyl.minHeight && playerPos.y <= cyl.maxHeight && isSnorkellingOrWinchActive) {
+        if (horizDist <= cyl.radius && playerPos.y >= cyl.minHeight && playerPos.y <= cyl.maxHeight && isSnorkellingActive) {
             console.log("💥 Collision detected: Flew into mainbase collision cylinder while snorkelling!");
             this.player.triggerCrash(false);
             return;

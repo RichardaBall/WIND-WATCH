@@ -16,7 +16,7 @@ import { HudManager } from './hudManager.js';
 import { WeatherSystem } from './weatherSystem.js';
 import { CloudSystem } from './cloudSystem.js';
 import { WaterSystem } from './waterSystem.js';
-import { WinchSystem } from './winchSystem.js';
+import { SnorkelSystem } from './snorkelSystem.js';
 import { NetworkManager } from './networkManager.js';
 
 export class Game {
@@ -25,7 +25,7 @@ export class Game {
         this.lastSentPos = new THREE.Vector3();
         this.lastSentRotorSpeed = -1;
         this.lastSentGearDown = null;
-        this.lastSentWinchState = null;
+        this.lastSentSnorkelState = null;
         this.lastSentWaterActive = null;
         this.lastSentLightState = null;
         this.clock = new THREE.Clock();
@@ -74,8 +74,8 @@ export class Game {
         this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, null, this.dayNightCycle);
 
         this.networkManager = new NetworkManager();
-        if (this.helicopterSystems.tools['WINCH']) {
-            this.helicopterSystems.tools['WINCH'].socket = this.networkManager.socket;
+        if (this.helicopterSystems.tools['SNORKEL']) {
+            this.helicopterSystems.tools['SNORKEL'].socket = this.networkManager.socket;
         }
         this.missionManager.socket = this.networkManager.socket;
 
@@ -99,7 +99,7 @@ export class Game {
             const remoteHeli = new HelicopterPlayer(this.scene, { isRemote: true, audioManager: this.player.audioManager });
             const remotePlayerRef = { gearDown: data.gearDown ?? true };
             const remoteWaterSystem = new WaterSystem(this.scene, remoteHeli.group, remotePlayerRef);
-            const remoteWinchSystem = new WinchSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
+            const remoteSnorkelSystem = new SnorkelSystem(this.scene, remoteHeli.group, remotePlayerRef, this.networkManager ? this.networkManager.socket : null);
 
             const remoteAudio = this.player.audioManager.createRemoteRotorSource();
 
@@ -111,7 +111,7 @@ export class Game {
                 group: remoteHeli.group,
                 helicopter: remoteHeli,
                 waterSystem: remoteWaterSystem,
-                winchSystem: remoteWinchSystem,
+                snorkelSystem: remoteSnorkelSystem,
                 playerRef: remotePlayerRef,
                 remoteAudio: remoteAudio,
                 shadowMesh: shadowMesh,
@@ -120,7 +120,7 @@ export class Game {
                 targetFrame: data.currentFrame || 5,
                 rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
                 gearDown: data.gearDown ?? true,
-                winchState: data.winchState || 'STOWED',
+                snorkelState: data.snorkelState || 'STOWED',
                 isDroppingWater: data.isDroppingWater || false
             };
 
@@ -192,7 +192,7 @@ export class Game {
                 if (rp.playerRef) {
                     rp.playerRef.gearDown = rp.gearDown;
                 }
-                rp.winchState = data.winchState || 'STOWED';
+                rp.snorkelState = data.snorkelState || 'STOWED';
                 rp.isDroppingWater = !!data.isDroppingWater;
 
                 if (rp.helicopter && rp.helicopter.material) {
@@ -229,10 +229,10 @@ export class Game {
                     const heli = rp.helicopter;
                     this.disposeObject(rp.group);
                     this.disposeObject(rp.shadowMesh);
-                    if (rp.winchSystem) {
-                        this.disposeObject(rp.winchSystem.cableLine);
-                        this.disposeObject(rp.winchSystem.hookMesh);
-                        this.disposeObject(rp.winchSystem.rotorWashSystem);
+                    if (rp.snorkelSystem) {
+                        this.disposeObject(rp.snorkelSystem.cableLine);
+                        this.disposeObject(rp.snorkelSystem.hookMesh);
+                        this.disposeObject(rp.snorkelSystem.rotorWashSystem);
                     }
                     if (rp.waterSystem) {
                         this.disposeObject(rp.waterSystem.particleSystem);
@@ -322,21 +322,21 @@ export class Game {
             const pos = this.player.getPosition();
             const currentRotorSpeed = this.player.rotorSpeed;
             const currentGearDown = this.player.gearDown;
-            const currentWinchState = this.player.winchState;
+            const currentSnorkelState = this.player.snorkelState;
             const currentWaterActive = this.helicopterSystems ? this.helicopterSystems.isWaterActive() : false;
 
             const hasMoved = pos.distanceToSquared(this.lastSentPos) > 0.001 || this.player.isMoving;
             const stateChanged = 
                 Math.abs(currentRotorSpeed - this.lastSentRotorSpeed) > 0.1 ||
                 currentGearDown !== this.lastSentGearDown ||
-                currentWinchState !== this.lastSentWinchState ||
+                currentSnorkelState !== this.lastSentSnorkelState ||
                 currentWaterActive !== this.lastSentWaterActive;
 
             if (hasMoved || stateChanged) {
                 this.lastSentPos.copy(pos);
                 this.lastSentRotorSpeed = currentRotorSpeed;
                 this.lastSentGearDown = currentGearDown;
-                this.lastSentWinchState = currentWinchState;
+                this.lastSentSnorkelState = currentSnorkelState;
                 this.lastSentWaterActive = currentWaterActive;
 
                 this.networkManager.emit('player-update', {
@@ -350,7 +350,7 @@ export class Game {
                     qy: this.player.mesh.quaternion.y,
                     qz: this.player.mesh.quaternion.z,
                     qw: this.player.mesh.quaternion.w,
-                    winchState: currentWinchState,
+                    snorkelState: currentSnorkelState,
                     isDroppingWater: currentWaterActive
                 });
             }
@@ -400,13 +400,13 @@ export class Game {
             }
 
             if (rp.waterSystem) rp.waterSystem.update(delta);
-            if (rp.winchSystem && rp.helicopter && rp.helicopter.mesh) {
-                if (rp.winchState === 'DEPLOYED' || rp.winchState === 'LOWERING') {
-                    rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 1.0, delta * 2.0);
+            if (rp.snorkelSystem && rp.helicopter && rp.helicopter.mesh) {
+                if (rp.snorkelState === 'DEPLOYED' || rp.snorkelState === 'LOWERING') {
+                    rp.snorkelSystem.currentExtension = THREE.MathUtils.lerp(rp.snorkelSystem.currentExtension, 1.0, delta * 2.0);
                 } else {
-                    rp.winchSystem.currentExtension = THREE.MathUtils.lerp(rp.winchSystem.currentExtension, 0.0, delta * 2.0);
+                    rp.snorkelSystem.currentExtension = THREE.MathUtils.lerp(rp.snorkelSystem.currentExtension, 0.0, delta * 2.0);
                 }
-                rp.winchSystem.update(delta, rp.helicopter.mesh.quaternion);
+                rp.snorkelSystem.update(delta, rp.helicopter.mesh.quaternion);
             }
         }
 
