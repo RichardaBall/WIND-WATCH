@@ -8,7 +8,6 @@ import { HelicopterSystems } from './helicopterSystems.js';
 import { DayNightCycle } from './dayNightCycle.js';
 import { setupSettings } from './settings.js';
 import { WindFarm } from './windfarm.js';
-import { SearchLightSystem } from './searchlight.js';
 import { NavRadar } from './navRadar.js';
 import { InputManager } from './inputManager.js';
 import { MissionManager } from './missionManager.js';
@@ -19,7 +18,6 @@ import { CloudSystem } from './cloudSystem.js';
 import { WaterSystem } from './waterSystem.js';
 import { WinchSystem } from './winchSystem.js';
 import { NetworkManager } from './networkManager.js';
-import { FpsCounter } from './fpsCounter.js';
 
 export class Game {
     constructor() {
@@ -66,16 +64,14 @@ export class Game {
         this.helicopterSystems = new HelicopterSystems(scene, this.player.group, this.player);
         this.player.helicopterSystems = this.helicopterSystems;
 
-        this.searchLightSystem = new SearchLightSystem(scene, this.player.group);
         this.navRadar = new NavRadar(scene, this.player, camera);
 
         this.collisionManager = new CollisionManager(scene, this.player, this.windFarm, this.mainBase);
-        this.missionManager = new MissionManager(scene, this.navRadar, this.windFarm, this.helicopterSystems, this.player, camera, this.searchLightSystem, null);
-        this.hudManager = new HudManager(this.player, this.helicopterSystems, this.searchLightSystem);
-        this.fpsCounter = new FpsCounter(renderer);
+        this.missionManager = new MissionManager(scene, this.navRadar, this.windFarm, this.helicopterSystems, this.player, camera, null, null);
+        this.hudManager = new HudManager(this.player, this.helicopterSystems, null);
 
         this.settings = setupSettings(this.dayNightCycle, this.player, this.weatherSystem, this.missionManager, this.helicopterSystems, this.cloudSystem);
-        this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, this.searchLightSystem, this.dayNightCycle);
+        this.inputManager = new InputManager(camera, this.player, this.helicopterSystems, null, this.dayNightCycle);
 
         this.networkManager = new NetworkManager();
         if (this.helicopterSystems.tools['WINCH']) {
@@ -111,29 +107,6 @@ export class Game {
             const shadowMesh = remoteHeli.shadowMesh;
             shadowMesh.position.set(data.x || 0, 0.2, data.z || 0);
 
-            const searchLight = new THREE.SpotLight(0xffffee, 0.0, 250, Math.PI / 6, 0.3, 1.0);
-            searchLight.position.set(0, -0.5, 0);
-            remoteHeli.group.add(searchLight);
-
-            const searchLightTarget = new THREE.Object3D();
-            this.scene.add(searchLightTarget);
-            searchLight.target = searchLightTarget;
-
-            // Lowered segment count from 32 to 16 for better rendering performance
-            const discGeo = new THREE.CircleGeometry(6.0, 16);
-            discGeo.rotateX(-Math.PI / 2);
-            
-            const discMat = new THREE.MeshBasicMaterial({
-                color: 0xe6f0ff,
-                transparent: true,
-                blending: THREE.NormalBlending,
-                depthWrite: false,
-                opacity: 0.0
-            });
-            const lightPoolMesh = new THREE.Mesh(discGeo, discMat);
-            lightPoolMesh.position.set(0, 0.05, 0);
-            this.scene.add(lightPoolMesh);
-
             this.remotePlayers[id] = {
                 group: remoteHeli.group,
                 helicopter: remoteHeli,
@@ -141,9 +114,6 @@ export class Game {
                 winchSystem: remoteWinchSystem,
                 playerRef: remotePlayerRef,
                 remoteAudio: remoteAudio,
-                searchLight: searchLight,
-                searchLightTarget: searchLightTarget,
-                lightPoolMesh: lightPoolMesh,
                 shadowMesh: shadowMesh,
                 targetPos: new THREE.Vector3(data.x || 0, data.y || 0, data.z || 0),
                 targetQuaternion: new THREE.Quaternion(data.qx || 0, data.qy || 0, data.qz || 0, data.qw || 1),
@@ -151,9 +121,7 @@ export class Game {
                 rotorSpeed: data.rotorSpeed !== undefined ? data.rotorSpeed : 0,
                 gearDown: data.gearDown ?? true,
                 winchState: data.winchState || 'STOWED',
-                isDroppingWater: data.isDroppingWater || false,
-                searchLightState: data.searchLightState || 'OFF',
-                targetSearchLightPos: new THREE.Vector3()
+                isDroppingWater: data.isDroppingWater || false
             };
 
             this.navRadar.addOrUpdateMarker(`remote_${id}`, remoteHeli, '#22c55e', 'PLAYER');
@@ -226,11 +194,6 @@ export class Game {
                 }
                 rp.winchState = data.winchState || 'STOWED';
                 rp.isDroppingWater = !!data.isDroppingWater;
-                rp.searchLightState = data.searchLightState || 'OFF';
-
-                if (data.slX !== undefined && data.slY !== undefined && data.slZ !== undefined) {
-                    rp.targetSearchLightPos.set(data.slX, data.slY, data.slZ);
-                }
 
                 if (rp.helicopter && rp.helicopter.material) {
                     if (rp.helicopter.gearDown !== rp.gearDown) {
@@ -275,13 +238,10 @@ export class Game {
                         this.disposeObject(rp.waterSystem.particleSystem);
                         this.disposeObject(rp.waterSystem.splashSystem);
                     }
-                    this.disposeObject(rp.searchLightTarget);
-                    this.disposeObject(rp.lightPoolMesh);
                     if (heli) {
                         // Added to the scene directly by HelicopterPlayer, not to its group
                         this.disposeObject(heli.shadowMesh);
                         this.disposeObject(heli.dropLine);
-                        this.disposeObject(heli.searchLightTarget);
                         // Only one of the gear textures is on the material at a time
                         for (const tex of [heli.gearUpTex, heli.gearDownTex, heli.emissiveTex]) {
                             if (tex) tex.dispose();
@@ -364,15 +324,13 @@ export class Game {
             const currentGearDown = this.player.gearDown;
             const currentWinchState = this.player.winchState;
             const currentWaterActive = this.helicopterSystems ? this.helicopterSystems.isWaterActive() : false;
-            const currentLightState = this.searchLightSystem ? this.searchLightSystem.state : 'OFF';
 
             const hasMoved = pos.distanceToSquared(this.lastSentPos) > 0.001 || this.player.isMoving;
             const stateChanged = 
                 Math.abs(currentRotorSpeed - this.lastSentRotorSpeed) > 0.1 ||
                 currentGearDown !== this.lastSentGearDown ||
                 currentWinchState !== this.lastSentWinchState ||
-                currentWaterActive !== this.lastSentWaterActive ||
-                currentLightState !== this.lastSentLightState;
+                currentWaterActive !== this.lastSentWaterActive;
 
             if (hasMoved || stateChanged) {
                 this.lastSentPos.copy(pos);
@@ -380,7 +338,6 @@ export class Game {
                 this.lastSentGearDown = currentGearDown;
                 this.lastSentWinchState = currentWinchState;
                 this.lastSentWaterActive = currentWaterActive;
-                this.lastSentLightState = currentLightState;
 
                 this.networkManager.emit('player-update', {
                     x: pos.x,
@@ -394,11 +351,7 @@ export class Game {
                     qz: this.player.mesh.quaternion.z,
                     qw: this.player.mesh.quaternion.w,
                     winchState: currentWinchState,
-                    isDroppingWater: currentWaterActive,
-                    searchLightState: currentLightState,
-                    slX: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.x : 0,
-                    slY: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.y : 0,
-                    slZ: this.searchLightSystem && this.searchLightSystem.lightTarget ? this.searchLightSystem.lightTarget.position.z : 0
+                    isDroppingWater: currentWaterActive
                 });
             }
         }
@@ -455,25 +408,6 @@ export class Game {
                 }
                 rp.winchSystem.update(delta, rp.helicopter.mesh.quaternion);
             }
-
-            if (rp.searchLight && rp.lightPoolMesh) {
-                if (rp.searchLightState !== 'OFF') {
-                    rp.searchLight.intensity = nightFactor * 90.0;
-                    rp.lightPoolMesh.material.opacity = nightFactor * 0.9;
-                    
-                    if (rp.searchLightTarget && rp.targetSearchLightPos) {
-                        rp.searchLightTarget.position.lerp(rp.targetSearchLightPos, Math.min(1, delta * 15.0));
-                        rp.lightPoolMesh.position.set(
-                            rp.searchLightTarget.position.x, 
-                            0.05, 
-                            rp.searchLightTarget.position.z
-                        );
-                    }
-                } else {
-                    rp.searchLight.intensity = 0.0;
-                    rp.lightPoolMesh.material.opacity = 0.0;
-                }
-            }
         }
 
         if (this.helicopterSystems) this.helicopterSystems.update(delta);
@@ -481,13 +415,8 @@ export class Game {
         if (this.missionManager && this.player) {
             this.missionManager.update(delta, this.player.getPosition(), nightFactor);
         }
-        if (this.hudManager && this.helicopterSystems && this.searchLightSystem) {
-            this.hudManager.update(this.helicopterSystems, this.searchLightSystem);
-        }
-
-        const mouseWorldPos = this.inputManager && typeof this.inputManager.getMouseWorldPosition === 'function' ? this.inputManager.getMouseWorldPosition() : this._scratchVector2.set(0, 0, 0);
-        if (this.searchLightSystem) {
-            this.searchLightSystem.update(delta, nightFactor, mouseWorldPos);
+        if (this.hudManager && this.helicopterSystems) {
+            this.hudManager.update(this.helicopterSystems, null);
         }
         
         this.logicThrottleTimer += delta;
@@ -506,8 +435,8 @@ export class Game {
             this.camera.lookAt(focusPoint);
         }
 
-        if (this.mainBase && this.camera && this.searchLightSystem) {
-            this.mainBase.update(delta, nightFactor, this.camera.quaternion, this.searchLightSystem, activeWeather);
+        if (this.mainBase && this.camera) {
+            this.mainBase.update(delta, nightFactor, this.camera.quaternion, null, activeWeather);
         }
         if (this.windFarm && this.camera) {
             this.windFarm.update(delta, this.camera.quaternion);
@@ -519,6 +448,5 @@ export class Game {
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
-        if (this.fpsCounter) this.fpsCounter.update();
     }
 }

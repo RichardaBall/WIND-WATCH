@@ -413,7 +413,7 @@ export class MainBase {
         });
     }
 
-    update(delta, nightFactor, cameraQuaternion, searchLightSystem = null, weather = '') {
+    update(delta, nightFactor, cameraQuaternion, weather = '') {
         const weatherStr = (weather || window.weather || window.currentWeather || '').toString().toUpperCase();
         const hasSnow = weatherStr.includes('SNOW');
         const hasRain = weatherStr.includes('RAIN') || weatherStr.includes('STORM');
@@ -448,19 +448,6 @@ export class MainBase {
 
         let baseColorFactor = 1 - nightFactor * 0.4;
         let baseBlueFactor = 1 - nightFactor * 0.3;
-
-        if (searchLightSystem && searchLightSystem.state !== 'OFF') {
-            const lightPos = searchLightSystem.lightPoolMesh.position;
-            const basePos = this.group.position;
-            const dx = basePos.x - lightPos.x;
-            const dz = basePos.z - lightPos.z;
-            const dist = Math.sqrt(dx * dx + dz * dz);
-
-            if (dist < 10.0) {
-                baseColorFactor = 1.0;
-                baseBlueFactor = 1.0;
-            }
-        }
 
         this.material.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);
         this.overlayMaterial.color.setRGB(baseColorFactor, baseColorFactor, baseBlueFactor);

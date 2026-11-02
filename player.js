@@ -89,13 +89,6 @@ export default class HelicopterPlayer {
         this.landingPadTarget = null;
         this.isTakingOff = false;
 
-        this.searchLight = new THREE.SpotLight(0xffffee, 150.0, 300.0, Math.PI / 4, 0.5, 1.0);
-        this.searchLight.position.set(0, -0.5, 0);
-        
-        this.searchLightTarget = new THREE.Object3D();
-        this.scene.add(this.searchLightTarget);
-        this.searchLight.target = this.searchLightTarget;
-
         const shadowCanvas = document.createElement('canvas');
         shadowCanvas.width = 64;
         shadowCanvas.height = 64;
@@ -344,7 +337,6 @@ export default class HelicopterPlayer {
         this.targetAltitude = this.landingPads[0].y;
         this.isMoving = false;
         this.rotorSpeed = 0;
-        this.searchLight.intensity = 0;
         this.audioManager.stopAllAudio();
         this.crashHandler.hideRestart();
         if (this.shadowMesh) this.shadowMesh.visible = true;
@@ -369,7 +361,6 @@ export default class HelicopterPlayer {
         this.isMoving = false;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
-        this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
         if (this.dropLine) this.dropLine.visible = false;
         
@@ -548,8 +539,6 @@ export default class HelicopterPlayer {
 
     update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
-
-        this.searchLight.intensity = (this.engineState === 'RUNNING') ? Math.max(40.0, nightFactor * 150.0) : 0.0;
 
         const pos = this.group.position;
         const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
@@ -836,14 +825,6 @@ export default class HelicopterPlayer {
         } else {
             this.currentSpeed = 0;
         }
-
-        const headingAngle = ((this.currentFrame - 2) / this.totalFrames) * (Math.PI * 2);
-        const forwardDist = 5.0;
-        const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
-        const targetZ = currentPos.z - Math.cos(headingAngle) * forwardDist;
-        const targetY = currentPos.y - 5.5;
-        
-        this.searchLightTarget.position.set(targetX, targetY, targetZ);
     }
 
     getLoadFactor() {
