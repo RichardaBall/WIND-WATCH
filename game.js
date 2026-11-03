@@ -436,7 +436,7 @@ export class Game {
         }
 
         if (this.mainBase && this.camera) {
-            this.mainBase.update(delta, nightFactor, this.camera.quaternion, null, activeWeather);
+            this.mainBase.update(delta, nightFactor, this.camera.quaternion, activeWeather);
         }
         if (this.windFarm && this.camera) {
             this.windFarm.update(delta, this.camera.quaternion);
