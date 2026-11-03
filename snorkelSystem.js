@@ -1,7 +1,7 @@
-// winchSystem.js
+// snorkelSystem.js
 import * as THREE from 'three';
 
-export class WinchSystem {
+export class SnorkelSystem {
     constructor(scene, parentGroup, playerRef, socket = null) {
         this.scene = scene;
         this.parentGroup = parentGroup;
@@ -12,7 +12,7 @@ export class WinchSystem {
         this.currentExtension = 0.0;
         this.targetExtension = 0.0;
         this.localAnchorY = -0.5;
-        this.isDescendingForWinch = false;
+        this.isDescendingForSnorkel = false;
 
         // --- Rotor Wash Particle Mist Pool Setup ---
         this.particlesCount = 3000;
@@ -87,31 +87,31 @@ export class WinchSystem {
         if (!this.playerRef) return;
 
         // Block input spam if currently retracting or climbing out
-        if (this.playerRef.winchState === 'RAISING' || this.playerRef.winchState === 'CLIMBING') {
+        if (this.playerRef.snorkelState === 'RAISING' || this.playerRef.snorkelState === 'CLIMBING') {
             return;
         }
 
         if (this.playerRef.gearDown) {
-            console.log("Cannot operate winch while landing gear is down!");
+            console.log("Cannot operate snorkel while landing gear is down!");
             this.isActive = false;
-            this.isDescendingForWinch = false;
+            this.isDescendingForSnorkel = false;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (typeof this.playerRef.setWinchMode === 'function') {
-                this.playerRef.setWinchMode(false);
+            if (typeof this.playerRef.setSnorkelMode === 'function') {
+                this.playerRef.setSnorkelMode(false);
             }
             if (this.playerRef.audioManager) {
-                this.playerRef.audioManager.stopWinch();
+                this.playerRef.audioManager.stopSnorkel();
             }
             return;
         }
 
-        if (this.playerRef.winchState === 'DEPLOYED') {
+        if (this.playerRef.snorkelState === 'DEPLOYED') {
             this.isActive = false;
-            this.isDescendingForWinch = false;
+            this.isDescendingForSnorkel = false;
             this.targetExtension = 0.0;
             if (this.playerRef.audioManager) {
-                this.playerRef.audioManager.startWinch();
+                this.playerRef.audioManager.startSnorkel();
             }
             if (typeof this.playerRef.startRetraction === 'function') {
                 this.playerRef.startRetraction();
@@ -120,13 +120,13 @@ export class WinchSystem {
         }
 
         // Only allow deployment if completely stowed
-        if (this.playerRef.winchState === 'STOWED') {
+        if (this.playerRef.snorkelState === 'STOWED') {
             this.isActive = true;
-            this.isDescendingForWinch = true;
+            this.isDescendingForSnorkel = true;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (typeof this.playerRef.setWinchMode === 'function') {
-                this.playerRef.setWinchMode(true);
+            if (typeof this.playerRef.setSnorkelMode === 'function') {
+                this.playerRef.setSnorkelMode(true);
             }
         }
     }
@@ -142,29 +142,29 @@ export class WinchSystem {
     }
 
     update(delta, cameraQuaternion) {
-        if (this.playerRef && this.playerRef.gearDown && (this.isActive || this.currentExtension > 0.01 || this.isDescendingForWinch)) {
+        if (this.playerRef && this.playerRef.gearDown && (this.isActive || this.currentExtension > 0.01 || this.isDescendingForSnorkel)) {
             this.isActive = false;
-            this.isDescendingForWinch = false;
+            this.isDescendingForSnorkel = false;
             this.targetExtension = 0.0;
             this.currentExtension = 0.0;
-            if (typeof this.playerRef.setWinchMode === 'function') {
-                this.playerRef.setWinchMode(false);
+            if (typeof this.playerRef.setSnorkelMode === 'function') {
+                this.playerRef.setSnorkelMode(false);
             }
             if (this.playerRef.audioManager) {
-                this.playerRef.audioManager.stopWinch();
+                this.playerRef.audioManager.stopSnorkel();
             }
         }
 
         const heliWorldPos = new THREE.Vector3();
         this.parentGroup.getWorldPosition(heliWorldPos);
 
-        if (this.isActive && this.isDescendingForWinch) {
-            const atWinchHeight = Math.abs(heliWorldPos.y - 12.0) < 0.5;
-            if (atWinchHeight) {
-                this.isDescendingForWinch = false;
+        if (this.isActive && this.isDescendingForSnorkel) {
+            const atSnorkelHeight = Math.abs(heliWorldPos.y - 12.0) < 0.5;
+            if (atSnorkelHeight) {
+                this.isDescendingForSnorkel = false;
                 this.targetExtension = 1.0; 
                 if (this.playerRef && this.playerRef.audioManager) {
-                    this.playerRef.audioManager.startWinch();
+                    this.playerRef.audioManager.startSnorkel();
                 }
             }
         }
@@ -172,11 +172,11 @@ export class WinchSystem {
         const speed = 1.5;
         const prevExtension = this.currentExtension;
         
-        if (!this.isDescendingForWinch) {
+        if (!this.isDescendingForSnorkel) {
             this.currentExtension = THREE.MathUtils.lerp(this.currentExtension, this.targetExtension, delta * speed);
         }
 
-        if (this.playerRef && this.playerRef.winchState === 'RAISING' && this.currentExtension < 0.01) {
+        if (this.playerRef && this.playerRef.snorkelState === 'RAISING' && this.currentExtension < 0.01) {
             if (typeof this.playerRef.finishRetraction === 'function') {
                 this.playerRef.finishRetraction();
             }
@@ -186,7 +186,7 @@ export class WinchSystem {
             if ((this.targetExtension === 1.0 && this.currentExtension > 0.99) || 
                 (this.targetExtension === 0.0 && this.currentExtension < 0.01)) {
                 if (this.playerRef && this.playerRef.audioManager) {
-                    this.playerRef.audioManager.stopWinch();
+                    this.playerRef.audioManager.stopSnorkel();
                 }
             }
         }
@@ -217,7 +217,7 @@ export class WinchSystem {
         const overHelipad = this.isOverHelipad(heliWorldPos);
         const isLowHover = heliWorldPos.y <= 15.0;
 
-        if (!overHelipad && !this.isDescendingForWinch && isLowHover && heightAboveWater > 0 && heightAboveWater <= 35.0) {
+        if (!overHelipad && !this.isDescendingForSnorkel && isLowHover && heightAboveWater > 0 && heightAboveWater <= 35.0) {
             const intensity = Math.max(0, (35.0 - heightAboveWater) / 35.0);
             const spawnCount = Math.floor(intensity * 12); 
 
@@ -259,7 +259,7 @@ export class WinchSystem {
             heliWorldPos.z
         );
 
-        if ((this.currentExtension < 0.01 && !this.isActive) || this.isDescendingForWinch) {
+        if ((this.currentExtension < 0.01 && !this.isActive) || this.isDescendingForSnorkel) {
             this.hookWorldPos.copy(startWorldPos);
             this.hookMesh.visible = false;
             this.cableLine.visible = false;

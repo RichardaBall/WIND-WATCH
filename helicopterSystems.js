@@ -1,7 +1,7 @@
 // helicopterSystems.js
 import * as THREE from 'three';
 import { WaterSystem } from './waterSystem.js';
-import { WinchSystem } from './winchSystem.js';
+import { SnorkelSystem } from './snorkelSystem.js';
 
 export class HelicopterSystems {
     constructor(scene, helicopterGroup, playerRef) {
@@ -11,7 +11,7 @@ export class HelicopterSystems {
 
         this.tools = {
             WATER: new WaterSystem(scene, helicopterGroup, playerRef),
-            WINCH: new WinchSystem(scene, helicopterGroup, playerRef)
+            SNORKEL: new SnorkelSystem(scene, helicopterGroup, playerRef)
         };
 
         this.activeToolKey = 'WATER';
@@ -36,15 +36,15 @@ export class HelicopterSystems {
 
     setTool(toolKey) {
         const waterActive = this.tools['WATER'] && this.tools['WATER'].isActive;
-        const winchActive = this.playerRef && this.playerRef.winchState !== 'STOWED';
+        const snorkelActive = this.playerRef && this.playerRef.snorkelState !== 'STOWED';
 
-        if (waterActive || winchActive) {
+        if (waterActive || snorkelActive) {
             console.log("Cannot switch tools while a tool is currently active or deployed!");
             return;
         }
 
-        // Prevent selecting winch (water fill) if water tank is already full
-        if (toolKey === 'WINCH' && this.water >= this.maxWater) {
+        // Prevent selecting snorkel (water fill) if water tank is already full
+        if (toolKey === 'SNORKEL' && this.water >= this.maxWater) {
             console.log("Water tank is already full! Water fill cannot be selected.");
             return;
         }
@@ -97,15 +97,15 @@ export class HelicopterSystems {
             }
         }
 
-        // Refill water at a constant rate when winch is deployed and at sea level
-        const winchTool = this.tools['WINCH'];
-        const isWinchAtSeaLevel = winchTool && winchTool.isActive && winchTool.currentExtension > 0.95 && winchTool.hookWorldPos.y <= 0.5;
-        if (isWinchAtSeaLevel) {
+        // Refill water at a constant rate when snorkel is deployed and at sea level
+        const snorkelTool = this.tools['SNORKEL'];
+        const isSnorkelAtSeaLevel = snorkelTool && snorkelTool.isActive && snorkelTool.currentExtension > 0.95 && snorkelTool.hookWorldPos.y <= 0.5;
+        if (isSnorkelAtSeaLevel) {
             this.water = Math.min(this.maxWater, this.water + delta * 30);
         }
 
         // Global check: If water tank is full, ensure we are not stuck in water fill mode
-        if (this.water >= this.maxWater && this.activeToolKey === 'WINCH') {
+        if (this.water >= this.maxWater && this.activeToolKey === 'SNORKEL') {
             console.log("Water tank full! Switching back to water drop mode.");
             this.setTool('WATER');
         }

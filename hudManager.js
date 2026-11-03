@@ -57,14 +57,6 @@ export class HudManager {
                     </svg>
                 </button>
 
-                <button id="hud-light-btn" title="Toggle Searchlight (L)" style="display: none; background: transparent; border: none; cursor: pointer; padding: 4px; align-items: center; justify-content: center; opacity: 0.9; color: #ffffff;">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <line x1="12" y1="1" x2="12" y2="3"></line>
-                        <line x1="12" y1="21" x2="12" y2="23"></line>
-                    </svg>
-                </button>
-
                 <button id="hud-tool-btn" title="Toggle Tool Mode (1 or 2)" style="background: transparent; border: none; cursor: pointer; padding: 4px; display: flex; align-items: center; justify-content: center; opacity: 0.9; color: #ffffff;">
                     <svg id="hud-tool-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
@@ -94,12 +86,6 @@ export class HudManager {
             }
         });
 
-        document.getElementById('hud-light-btn').addEventListener('click', () => {
-            if (this.searchLightSystem) {
-                this.searchLightSystem.cycleState(null);
-            }
-        });
-
         document.getElementById('hud-tool-btn').addEventListener('click', () => {
             if (this.helicopterSystems) {
                 const isWaterFull = this.helicopterSystems.water >= this.helicopterSystems.maxWater;
@@ -110,16 +96,6 @@ export class HudManager {
                 }
             }
         });
-    }
-
-    showSearchlightIcon() {
-        const lightBtn = document.getElementById('hud-light-btn');
-        if (lightBtn) lightBtn.style.display = 'flex';
-    }
-
-    hideSearchlightIcon() {
-        const lightBtn = document.getElementById('hud-light-btn');
-        if (lightBtn) lightBtn.style.display = 'none';
     }
 
     update() {

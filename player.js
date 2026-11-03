@@ -83,18 +83,11 @@ export default class HelicopterPlayer {
         this.maxRotorStep = 0.35;
 
         this.gearDown = true;
-        this.isWinchActive = false;
-        this.winchState = 'STOWED'; 
-        this.winchTimer = 0;
+        this.isSnorkelActive = false;
+        this.snorkelState = 'STOWED'; 
+        this.snorkelTimer = 0;
         this.landingPadTarget = null;
         this.isTakingOff = false;
-
-        this.searchLight = new THREE.SpotLight(0xffffee, 150.0, 300.0, Math.PI / 4, 0.5, 1.0);
-        this.searchLight.position.set(0, -0.5, 0);
-        
-        this.searchLightTarget = new THREE.Object3D();
-        this.scene.add(this.searchLightTarget);
-        this.searchLight.target = this.searchLightTarget;
 
         const shadowCanvas = document.createElement('canvas');
         shadowCanvas.width = 64;
@@ -315,9 +308,9 @@ export default class HelicopterPlayer {
         this.flightStarted = false;
         this.engineState = 'OFF';
         this.gearDown = true;
-        this.isWinchActive = false;
-        this.winchState = 'STOWED';
-        this.winchTimer = 0;
+        this.isSnorkelActive = false;
+        this.snorkelState = 'STOWED';
+        this.snorkelTimer = 0;
         this.currentFrame = 6; 
         this.verticalVelocity = 0;
         this.currentSpeed = 0;
@@ -344,7 +337,6 @@ export default class HelicopterPlayer {
         this.targetAltitude = this.landingPads[0].y;
         this.isMoving = false;
         this.rotorSpeed = 0;
-        this.searchLight.intensity = 0;
         this.audioManager.stopAllAudio();
         this.crashHandler.hideRestart();
         if (this.shadowMesh) this.shadowMesh.visible = true;
@@ -369,7 +361,6 @@ export default class HelicopterPlayer {
         this.isMoving = false;
         this.currentSpeed = 0;
         this.verticalVelocity = 0;
-        this.searchLight.intensity = 0;
         if (this.shadowMesh) this.shadowMesh.visible = false;
         if (this.dropLine) this.dropLine.visible = false;
         
@@ -382,13 +373,13 @@ export default class HelicopterPlayer {
         this.crashHandler.deploy(this.group.position);
     }
 
-    setWinchMode(isWinchActive) {
+    setSnorkelMode(isSnorkelActive) {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff) return;
 
-        if (isWinchActive) {
-            if (this.winchState === 'STOWED') {
-                this.isWinchActive = true;
-                this.winchState = 'DESCENDING';
+        if (isSnorkelActive) {
+            if (this.snorkelState === 'STOWED') {
+                this.isSnorkelActive = true;
+                this.snorkelState = 'DESCENDING';
                 this.targetAltitude = 12.0;
             }
         }
@@ -396,8 +387,8 @@ export default class HelicopterPlayer {
 
     startRetraction() {
         if (this.hasCrashed || this.engineState !== 'RUNNING') return;
-        if (this.winchState === 'DEPLOYED') {
-            this.winchState = 'RAISING';
+        if (this.snorkelState === 'DEPLOYED') {
+            this.snorkelState = 'RAISING';
             this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
@@ -406,8 +397,8 @@ export default class HelicopterPlayer {
     }
 
     finishRetraction() {
-        if (this.winchState === 'RAISING') {
-            this.winchState = 'CLIMBING';
+        if (this.snorkelState === 'RAISING') {
+            this.snorkelState = 'CLIMBING';
             this.targetAltitude = 45.0;
         }
     }
@@ -505,14 +496,14 @@ export default class HelicopterPlayer {
         if (this.hasCrashed || this.engineState !== 'RUNNING' || this.isTakingOff || this.engineState === 'SHUTTING_DOWN') {
             return;
         }
-        if (this.winchState === 'LOWERING' || this.winchState === 'RAISING') {
+        if (this.snorkelState === 'LOWERING' || this.snorkelState === 'RAISING') {
             return;
         }
 
         this.targetPosition.copy(newPos);
         const clickPos2D = this._scratchVector2D_1.set(newPos.x, newPos.z);
         const isDestOverIsland = clickPos2D.length() < 50.0;
-        const flightAlt = (this.winchState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 12.0;
+        const flightAlt = (this.snorkelState === 'STOWED') ? (isDestOverIsland ? 45.0 : 38.0) : 12.0;
         this.targetPosition.y = flightAlt;
         this.targetAltitude = flightAlt;
         this.isMoving = true;
@@ -521,7 +512,7 @@ export default class HelicopterPlayer {
     toggleGear() {
         if (this.hasCrashed) return;
 
-        if (this.winchState !== 'STOWED') {
+        if (this.snorkelState !== 'STOWED') {
             return;
         }
 
@@ -549,8 +540,6 @@ export default class HelicopterPlayer {
     update(delta, nightFactor = 0.0, windForce = new THREE.Vector3()) {
         if (this.hasCrashed) return;
 
-        this.searchLight.intensity = (this.engineState === 'RUNNING') ? Math.max(40.0, nightFactor * 150.0) : 0.0;
-
         const pos = this.group.position;
         const { inPad1, inPad2, isInside } = this.isInside3DBox(pos);
         const pos2D = this._scratchVector2D_1.set(pos.x, pos.z);
@@ -565,7 +554,7 @@ export default class HelicopterPlayer {
             }
         }
 
-        if (this.engineState === 'RUNNING' && this.winchState === 'STOWED' && !this.isMoving && !this.isTakingOff && this.engineState !== 'SHUTTING_DOWN') {
+        if (this.engineState === 'RUNNING' && this.snorkelState === 'STOWED' && !this.isMoving && !this.isTakingOff && this.engineState !== 'SHUTTING_DOWN') {
             const isOverIsland = pos2D.length() < 50.0;
             this.targetAltitude = isOverIsland ? 45.0 : 38.0;
         }
@@ -583,7 +572,7 @@ export default class HelicopterPlayer {
                 return;
             }
 
-            const minSafeAlt = (this.winchState !== 'STOWED') ? 8.0 : 15.0;
+            const minSafeAlt = (this.snorkelState !== 'STOWED') ? 8.0 : 15.0;
             if (!isInside && pos.y <= minSafeAlt && this.engineState === 'RUNNING' && this.engineState !== 'SHUTTING_DOWN') {
                 this.triggerCrash(false);
                 return;
@@ -600,34 +589,34 @@ export default class HelicopterPlayer {
             }
         }
 
-        if (this.winchState === 'DESCENDING') {
+        if (this.snorkelState === 'DESCENDING') {
             this.targetAltitude = 12.0;
             if (Math.abs(this.group.position.y - 12.0) < 1.0) {
-                this.winchState = 'LOWERING';
-                this.winchTimer = 1.5; 
+                this.snorkelState = 'LOWERING';
+                this.snorkelTimer = 1.5; 
                 this.isMoving = false;
                 this.currentSpeed = 0;
                 this.targetPosition.copy(this.group.position);
             }
-        } else if (this.winchState === 'LOWERING') {
+        } else if (this.snorkelState === 'LOWERING') {
             this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
-            this.winchTimer -= delta;
-            if (this.winchTimer <= 0) {
-                this.winchState = 'DEPLOYED'; 
+            this.snorkelTimer -= delta;
+            if (this.snorkelTimer <= 0) {
+                this.snorkelState = 'DEPLOYED'; 
             }
-        } else if (this.winchState === 'RAISING') {
+        } else if (this.snorkelState === 'RAISING') {
             this.targetAltitude = 12.0;
             this.isMoving = false;
             this.currentSpeed = 0;
             this.targetPosition.copy(this.group.position);
-        } else if (this.winchState === 'CLIMBING') {
+        } else if (this.snorkelState === 'CLIMBING') {
             this.targetAltitude = 45.0;
             if (Math.abs(this.group.position.y - 45.0) < 1.0) {
-                this.isWinchActive = false;
-                this.winchState = 'STOWED';
+                this.isSnorkelActive = false;
+                this.snorkelState = 'STOWED';
             }
         }
 
@@ -769,13 +758,13 @@ export default class HelicopterPlayer {
             this.dropLine.computeLineDistances();
         }
 
-        if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.winchState !== 'LOWERING' && this.winchState !== 'RAISING') {
+        if (this.isMoving && this.engineState === 'RUNNING' && !this.isTakingOff && this.snorkelState !== 'LOWERING' && this.snorkelState !== 'RAISING') {
             const targetXZ = this._scratchVector2D_2.set(this.targetPosition.x, this.targetPosition.z);
             const currentXZ = this._scratchVector2D_3.set(currentPos.x, currentPos.z);
             const distance = currentXZ.distanceTo(targetXZ);
 
             if (distance > 0.2) {
-                const isSlow = this.gearDown || (this.winchState === 'DEPLOYED');
+                const isSlow = this.gearDown || (this.snorkelState === 'DEPLOYED');
                 const load = this.getLoadFactor();
                 const loadedMaxSpeed = this.maxSpeed * (1.0 - this.loadSpeedLoss * (load - 1.0));
                 const targetMaxSpeed = isSlow ? loadedMaxSpeed * 0.5 : loadedMaxSpeed;
@@ -836,14 +825,6 @@ export default class HelicopterPlayer {
         } else {
             this.currentSpeed = 0;
         }
-
-        const headingAngle = ((this.currentFrame - 2) / this.totalFrames) * (Math.PI * 2);
-        const forwardDist = 5.0;
-        const targetX = currentPos.x + Math.sin(headingAngle) * forwardDist;
-        const targetZ = currentPos.z - Math.cos(headingAngle) * forwardDist;
-        const targetY = currentPos.y - 5.5;
-        
-        this.searchLightTarget.position.set(targetX, targetY, targetZ);
     }
 
     getLoadFactor() {

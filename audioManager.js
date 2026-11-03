@@ -14,8 +14,8 @@ export class AudioManager {
         this.rotorGainNode = null;
         this.sprayNoiseSource = null;
         this.sprayGainNode = null;
-        this.winchNoiseSource = null;
-        this.winchGainNode = null;
+        this.snorkelNoiseSource = null;
+        this.snorkelGainNode = null;
         this.rainNoiseSource = null;
         this.rainGainNode = null;
         this.windNoiseSource = null;
@@ -26,7 +26,7 @@ export class AudioManager {
         this.rainTimeout = null;
         this.windTimeout = null;
         this.sprayTimeout = null;
-        this.winchTimeout = null;
+        this.snorkelTimeout = null;
         this.rotorTimeout = null;
 
         // Auto-unlock audio context on user interaction with guaranteed cleanup reference
@@ -446,8 +446,8 @@ export class AudioManager {
         }
     }
 
-    startWinch() {
-        if (this.audioCtx && !this.winchNoiseSource) {
+    startSnorkel() {
+        if (this.audioCtx && !this.snorkelNoiseSource) {
             if (this.audioCtx.state === 'suspended') {
                 this.audioCtx.resume();
             }
@@ -459,50 +459,50 @@ export class AudioManager {
                     data[i] = Math.random() * 2 - 1;
                 }
 
-                this.winchNoiseSource = this.audioCtx.createBufferSource();
-                this.winchNoiseSource.buffer = buffer;
-                this.winchNoiseSource.loop = true;
+                this.snorkelNoiseSource = this.audioCtx.createBufferSource();
+                this.snorkelNoiseSource.buffer = buffer;
+                this.snorkelNoiseSource.loop = true;
 
                 const filter = this.audioCtx.createBiquadFilter();
                 filter.type = 'bandpass';
                 filter.frequency.setValueAtTime(350, this.audioCtx.currentTime);
                 filter.Q.setValueAtTime(2.0, this.audioCtx.currentTime);
 
-                this.winchGainNode = this.audioCtx.createGain();
-                this.winchGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
-                this.winchGainNode.gain.linearRampToValueAtTime(0.3, this.audioCtx.currentTime + 0.1);
+                this.snorkelGainNode = this.audioCtx.createGain();
+                this.snorkelGainNode.gain.setValueAtTime(0.0, this.audioCtx.currentTime);
+                this.snorkelGainNode.gain.linearRampToValueAtTime(0.3, this.audioCtx.currentTime + 0.1);
 
-                this.winchNoiseSource.connect(filter);
-                filter.connect(this.winchGainNode);
-                this.winchGainNode.connect(this.audioCtx.destination);
+                this.snorkelNoiseSource.connect(filter);
+                filter.connect(this.snorkelGainNode);
+                this.snorkelGainNode.connect(this.audioCtx.destination);
 
-                this.winchNoiseSource.start(0);
+                this.snorkelNoiseSource.start(0);
             } catch (e) {
-                console.warn("Error starting winch audio:", e);
+                console.warn("Error starting snorkel audio:", e);
             }
         }
     }
 
-    stopWinch() {
-        if (this.winchNoiseSource && this.winchGainNode) {
+    stopSnorkel() {
+        if (this.snorkelNoiseSource && this.snorkelGainNode) {
             try {
-                if (this.winchTimeout) clearTimeout(this.winchTimeout);
+                if (this.snorkelTimeout) clearTimeout(this.snorkelTimeout);
                 const now = this.audioCtx.currentTime;
-                this.winchGainNode.gain.setValueAtTime(this.winchGainNode.gain.value, now);
-                this.winchGainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
+                this.snorkelGainNode.gain.setValueAtTime(this.snorkelGainNode.gain.value, now);
+                this.snorkelGainNode.gain.linearRampToValueAtTime(0.001, now + 0.1);
 
-                this.winchTimeout = setTimeout(() => {
-                    if (this.winchNoiseSource) {
-                        try { this.winchNoiseSource.stop(); } catch(e) {}
-                        this.winchNoiseSource.disconnect();
-                        this.winchNoiseSource = null;
-                        this.winchGainNode = null;
+                this.snorkelTimeout = setTimeout(() => {
+                    if (this.snorkelNoiseSource) {
+                        try { this.snorkelNoiseSource.stop(); } catch(e) {}
+                        this.snorkelNoiseSource.disconnect();
+                        this.snorkelNoiseSource = null;
+                        this.snorkelGainNode = null;
                     }
-                    this.winchTimeout = null;
+                    this.snorkelTimeout = null;
                 }, 100);
             } catch (e) {
-                this.winchNoiseSource = null;
-                this.winchGainNode = null;
+                this.snorkelNoiseSource = null;
+                this.snorkelGainNode = null;
             }
         }
     }
@@ -510,7 +510,7 @@ export class AudioManager {
     stopAllAudio() {
         this.stopRotor();
         this.stopWaterSpray();
-        this.stopWinch();
+        this.stopSnorkel();
         this.stopRain();
         this.stopWind();
         this.startupAudio.pause();
