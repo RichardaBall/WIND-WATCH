@@ -387,6 +387,7 @@ export class MainBase {
             marker.renderOrder = 1;
             marker.position.set(pos.x, pos.y, zVal);
             marker.scale.set(pos.scale, pos.scale, pos.scale);
+            marker.visible = false; // Hidden by default during day
             this.group.add(marker);
 
             const lightObj = { category, index: idx, marker, config: pos };
@@ -400,7 +401,7 @@ export class MainBase {
                     transparent: true,
                     blending: THREE.AdditiveBlending,
                     depthWrite: false,
-                    opacity: 0.0
+                 opacity: 0.0
                 });
                 lightObj.glow = new THREE.Mesh(this.glowGeometry, glowMat);
                 lightObj.glow.renderOrder = 1;
@@ -512,6 +513,10 @@ export class MainBase {
         this.overlayMaterial.lightMapIntensity = this.material.lightMapIntensity;
         this.overlayMaterial.lightMap = this.material.lightMap;
 
+        // Check if it's daytime (nightFactor is near 0)
+        // Using a lower threshold (< 0.05) or checking what nightFactor evaluates to in your day/night cycle controller.
+        const isNight = nightFactor > 0.05;
+
         this.allLights.forEach(item => {
             if (item.config.flashing) {
                 item.flashTimer += delta;
@@ -520,10 +525,13 @@ export class MainBase {
                     item.flashState = !item.flashState;
                     item.flashTimer = 0;
                 }
-                const active = item.flashState && nightFactor > 0.1;
+                const active = item.flashState && isNight;
                 item.glow.material.opacity = nightFactor * this.glowStrength;
                 item.glow.visible = active;
-                item.marker.visible = item.flashState;
+                item.marker.visible = active;
+            } else {
+                // Ensure non-flashing lights respect night/day state completely
+                item.marker.visible = isNight;
             }
         });
 
